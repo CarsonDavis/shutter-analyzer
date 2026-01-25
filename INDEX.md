@@ -7,7 +7,8 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | Document | Purpose |
 |----------|---------|
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
-| [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements |
+| [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements (CLI tool) |
+| [docs/ANDROID_APP_SPEC.md](docs/ANDROID_APP_SPEC.md) | **Android app specification** - screens, flows, requirements |
 | [docs/THEORY.md](docs/THEORY.md) | Theory of shutter speed measurement |
 | [docs/HOW_TO.md](docs/HOW_TO.md) | Step-by-step usage guide |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
@@ -169,14 +170,25 @@ Manual verification tool for validating event detection visually.
 
 **Usage:**
 ```bash
-uv run python -m shutter_analyzer.verify <video_path> [--method original|zscore|dbscan]
+# Interactive mode - step through events
+uv run python -m shutter_analyzer.verify <video_path> [--method original]
+
+# Montage mode - generate frame images for each event
+uv run python -m shutter_analyzer.verify <video_path> --montage
 ```
 
-**Features:**
-- Side-by-side frame display: frame before event (gray border) vs first event frame (green border)
+**Interactive Mode Features:**
+- Side-by-side frame display: frame before event vs first event frame
 - Annotates frames with frame number and brightness value
-- Interactive: press any key to advance, 'q' to quit
-- Supports all three threshold methods
+- Press any key to advance, 'q' to quit
+
+**Montage Mode Features:**
+- Generates PNG showing all frames in each event
+- Includes BEFORE and AFTER context frames (blue labels) to verify event boundaries
+- Each event frame labeled with brightness weight (FULL ≥95%, or percentage)
+- Color coded: green (FULL), orange (50-95%), red (<50%), blue (context)
+- Visualizes shutter opening pattern: dark → partial → full → partial → dark
+- Output: `outputs/<video-name>/event_XX_frames.png`
 
 ---
 

@@ -139,6 +139,15 @@ Step-by-step instructions for users:
 - Shows frame number and brightness value on each frame
 - Allows quick visual confirmation that thresholds are working correctly
 
+### NFR-5: Event Frame Montages
+- Generate PNG images showing all frames within each detected event
+- Includes BEFORE and AFTER context frames to verify event boundaries
+- Each event frame labeled with brightness weight (FULL, percentage)
+- Color coding: green (FULL ≥95%), orange (50-95%), red (<50%), blue (context)
+- Visualizes shutter opening pattern: dark → partial → full → partial → dark
+- Long events show first half + last half of frames
+- Saved to `outputs/<video-name>/event_XX_frames.png`
+
 ---
 
 ## Current Implementation Status
@@ -152,5 +161,6 @@ Step-by-step instructions for users:
 | FR-5: Results Table | Complete - terminal table with color gradient, markdown output |
 | FR-6: Output Location | Complete - `outputs/<video-name>/` structure |
 | NFR-4: Manual Verification | Complete - `verify.py` with side-by-side frame viewer |
+| NFR-5: Event Frame Montages | Complete - `verify.py --montage` generates frame images |
 | DR-1: Theory Docs | Complete - `docs/THEORY.md` |
 | DR-2: How-To Guide | Complete - `docs/HOW_TO.md` |
