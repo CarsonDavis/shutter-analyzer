@@ -25,6 +25,7 @@ class FrameBrightnessStats:
         percentiles: Dictionary of brightness percentiles (e.g., {10: 23.5, 90: 187.2})
         baseline: The baseline brightness value (typically represents closed shutter)
         threshold: The calculated threshold to distinguish open/closed shutter
+        peak_brightness: The typical brightness when shutter is fully open (95th percentile of events)
     """
 
     min_brightness: float
@@ -34,6 +35,7 @@ class FrameBrightnessStats:
     percentiles: Dict[int, float]
     baseline: float
     threshold: float
+    peak_brightness: Optional[float] = None
 
 
 class FrameAnalyzer:
@@ -295,6 +297,36 @@ class FrameAnalyzer:
 
         return best_threshold
 
+    @staticmethod
+    def calculate_peak_brightness(
+        events: List[Tuple[int, int, List[float]]]
+    ) -> Optional[float]:
+        """
+        Calculate the peak brightness from detected events.
+
+        Uses the 95th percentile of all brightness values during events
+        to represent the typical fully-open shutter brightness.
+
+        Args:
+            events: List of (start_frame, end_frame, brightness_values) tuples
+
+        Returns:
+            Peak brightness value, or None if no events
+        """
+        if not events:
+            return None
+
+        # Collect all brightness values from events
+        all_event_brightness = []
+        for _, _, brightness_values in events:
+            all_event_brightness.extend(brightness_values)
+
+        if not all_event_brightness:
+            return None
+
+        # Use 95th percentile as peak (avoid outliers)
+        return float(np.percentile(all_event_brightness, 95))
+
     @classmethod
     def analyze_video_and_find_events(
         cls,
@@ -324,5 +356,9 @@ class FrameAnalyzer:
 
         # Second pass: find shutter events using the determined threshold
         events = cls.find_shutter_events(brightness_values, brightness_stats.threshold)
+
+        # Calculate peak brightness from events and update stats
+        peak_brightness = cls.calculate_peak_brightness(events)
+        brightness_stats.peak_brightness = peak_brightness
 
         return brightness_stats, events

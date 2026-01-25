@@ -8,7 +8,10 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 |----------|---------|
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Step-by-step implementation instructions |
+| [docs/THEORY.md](docs/THEORY.md) | Theory of shutter speed measurement |
+| [docs/HOW_TO.md](docs/HOW_TO.md) | Step-by-step usage guide |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
+| [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) | Implementation progress log |
 | [architecture.md](architecture.md) | API documentation and technical details |
 
 ---
@@ -18,24 +21,28 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 ```
 shutter-analyzer/
 ├── shutter_analyzer/              # Core Python module
-│   ├── __init__.py                # Package initializer
+│   ├── __init__.py                # Package initializer with exports
+│   ├── __main__.py                # Module entry point
 │   ├── video_processor.py         # Video file I/O operations
 │   ├── frame_analyzer.py          # Brightness analysis and event detection
 │   ├── shutter_calculator.py      # Shutter speed calculations
-│   └── main.py                    # Entry point (placeholder)
+│   ├── output.py                  # Result formatting and file generation
+│   ├── verify.py                  # Manual verification tool
+│   └── main.py                    # CLI entry point
 ├── videos/                        # Input video files
 │   └── *.mp4                      # Test videos
 ├── outputs/                       # Generated outputs (gitignored except examples/)
-│   └── examples/                  # Example outputs for reference
+│   ├── examples/                  # Example outputs for reference
+│   └── <video-name>/              # Per-video results
 ├── docs/                          # Documentation and research
 │   └── research/                  # Market research and publishing guides
 ├── backup/                        # Extracted frames backup (gitignored)
 ├── test_basic_functionality.py    # Interactive test suite
-├── frames.py                      # Basic frame extraction utility (to be removed)
-├── frames_smart.py                # Smart frame extraction (to be removed)
 ├── REQUIREMENTS.md                # Project requirements
 ├── IMPLEMENTATION_PLAN.md         # Implementation instructions
+├── IMPLEMENTATION_LOG.md          # Implementation progress log
 ├── architecture.md                # API documentation
+├── pyproject.toml                 # Python project configuration
 └── INDEX.md                       # This file
 ```
 
@@ -57,7 +64,12 @@ Handles all video file operations using OpenCV.
 ### `shutter_analyzer/frame_analyzer.py`
 Analyzes frames for brightness and detects shutter open/close events.
 
-**Class: `FrameBrightnessStats`** - Data class storing brightness statistics
+**Class: `FrameBrightnessStats`** - Data class storing brightness statistics:
+- `min_brightness`, `max_brightness`, `mean_brightness`, `median_brightness`
+- `percentiles` - Dictionary of brightness percentiles
+- `baseline` - Closed shutter brightness
+- `threshold` - Detection threshold
+- `peak_brightness` - Typical fully-open brightness (95th percentile of events)
 
 **Class: `FrameAnalyzer`** - Static methods for frame analysis:
 - `calculate_frame_brightness()` - Computes average brightness of a frame
@@ -66,6 +78,7 @@ Analyzes frames for brightness and detects shutter open/close events.
 - `find_shutter_events()` - Identifies sequences of frames where shutter is open
 - `find_threshold_using_zscore()` - Z-score statistical threshold detection
 - `find_threshold_using_dbscan()` - DBSCAN clustering threshold detection
+- `calculate_peak_brightness()` - Calculates peak from event data
 - `analyze_video_and_find_events()` - Two-pass analysis (brightness stats then events)
 
 ---
@@ -76,13 +89,53 @@ Calculates shutter speeds from detected events.
 **Class: `ShutterEvent`** - Data class representing a shutter open/close event:
 - `start_frame`, `end_frame` - Event boundaries
 - `duration_frames` - Number of frames shutter was open
+- `weighted_duration_frames` - Weighted count based on partial-open frames
+- `baseline_brightness`, `peak_brightness` - Reference values for weighting
 - `max_brightness`, `avg_brightness` - Brightness metrics
 
 **Class: `ShutterSpeedCalculator`** - Static methods:
 - `calculate_duration_seconds()` - Converts frame count to duration (supports slow-motion)
-- `calculate_shutter_speed()` - Calculates speed as fraction (1/x)
+- `calculate_shutter_speed()` - Calculates speed as fraction (1/x), supports weighted duration
 - `compare_with_expected()` - Computes percentage error
 - `group_shutter_events()` - Matches events to expected speed settings
+
+---
+
+### `shutter_analyzer/output.py`
+Result formatting and file generation.
+
+**Functions:**
+- `get_output_dir()` - Creates outputs/<video-stem>/ directory
+- `get_variation_color()` - ANSI color codes for terminal display
+- `format_results_table()` - Formats terminal table with color-coded variations
+- `generate_results_markdown()` - Generates markdown report with inline colors
+- `save_results_markdown()` - Saves report to results.md
+
+---
+
+### `shutter_analyzer/main.py`
+Main CLI entry point with two-stage workflow.
+
+**Usage:**
+```bash
+uv run python -m shutter_analyzer <video_path> [options]
+```
+
+**Options:**
+- `--method` - Detection method: original (default), zscore, dbscan
+- `--recording-fps` - Actual recording FPS for slow-motion videos
+- `--events` - Expected event count (required for zscore/dbscan)
+
+**Workflow:**
+1. **Stage 1:** Analyze video, detect events, display results table
+2. **Stage 2:** Optionally enter expected speeds for comparison
+
+**Example:**
+```bash
+uv run python -m shutter_analyzer videos/camera_test.mp4
+# Shows detected events, saves timeline and results.md
+# Prompts for expected speeds (e.g., "1/500, 1/250, 1/125")
+```
 
 ---
 
@@ -111,40 +164,19 @@ uv run test_basic_functionality.py
 
 ---
 
-### `frames.py`
-Basic frame extraction - extracts and saves all frames as WebP images.
+### `shutter_analyzer/verify.py`
+Manual verification tool for validating event detection visually.
 
 **Usage:**
 ```bash
-uv run frames.py <video_path> [options]
+uv run python -m shutter_analyzer.verify <video_path> [--method original|zscore|dbscan]
 ```
-
-**Options:**
-- `--quality` - WebP compression quality (0-100)
-- `--step` - Extract every Nth frame
-- `--max-frames` - Maximum frames to extract
-
-**Output:** Individual WebP files with frame numbers overlaid
-
----
-
-### `frames_smart.py`
-Smart frame extraction - extracts frames around detected shutter events.
-
-**Usage:**
-```bash
-uv run frames_smart.py <video_path> [options]
-```
-
-**Options:**
-- `--padding` - Frames before/after events to include
-- `--percentile` - Percentile for threshold calculation
-- `--margin-factor` - Threshold margin factor
 
 **Features:**
-- Two-pass extraction (analyze then extract)
-- Annotates frames with brightness values and event markers
-- Only extracts frames near shutter events
+- Side-by-side frame display: frame before event (gray border) vs first event frame (green border)
+- Annotates frames with frame number and brightness value
+- Interactive: press any key to advance, 'q' to quit
+- Supports all three threshold methods
 
 ---
 

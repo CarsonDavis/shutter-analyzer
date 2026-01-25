@@ -146,11 +146,11 @@ Step-by-step instructions for users:
 | Requirement | Status |
 |-------------|--------|
 | FR-1: Video Input | Complete - `videos/` folder created |
-| FR-2: Analysis Algorithm | Partial - missing intermediate frame weighting |
-| FR-3: Speed Comparison | Partial - speeds entered before analysis, not after |
-| FR-4: Line Graph | Complete |
-| FR-5: Results Table | Incomplete - no formatted markdown output, no color gradient |
-| FR-6: Output Location | Complete - `outputs/` structure created with examples |
-| NFR-4: Manual Verification | Not started |
-| DR-1: Theory Docs | Not started |
-| DR-2: How-To Guide | Not started |
+| FR-2: Analysis Algorithm | Complete - includes intermediate frame weighting |
+| FR-3: Speed Comparison | Complete - two-stage workflow (analyze first, then compare) |
+| FR-4: Line Graph | Complete - brightness_timeline.png saved to outputs/ |
+| FR-5: Results Table | Complete - terminal table with color gradient, markdown output |
+| FR-6: Output Location | Complete - `outputs/<video-name>/` structure |
+| NFR-4: Manual Verification | Complete - `verify.py` with side-by-side frame viewer |
+| DR-1: Theory Docs | Complete - `docs/THEORY.md` |
+| DR-2: How-To Guide | Complete - `docs/HOW_TO.md` |
