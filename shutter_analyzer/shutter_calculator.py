@@ -112,7 +112,7 @@ class ShutterSpeedCalculator:
         shutter_event: ShutterEvent, fps: float, recording_fps: Optional[float] = None
     ) -> float:
         """
-        Calculates the effective shutter speed.
+        Calculates the effective shutter speed as a fraction (1/x).
 
         Args:
             shutter_event: ShutterEvent object
@@ -120,12 +120,17 @@ class ShutterSpeedCalculator:
             recording_fps: Actual recording FPS (for slow motion videos)
 
         Returns:
-            Shutter speed in seconds (e.g., 0.5 for 1/2 second)
+            Shutter speed as a decimal representing 1/x
+            (e.g., 0.002 for 1/500 second)
         """
+        # Calculate duration in seconds
         duration = ShutterSpeedCalculator.calculate_duration_seconds(
             shutter_event.start_frame, shutter_event.end_frame, fps, recording_fps
         )
-        return duration
+
+        # Convert to conventional shutter speed (1/x)
+        # Return the reciprocal of the duration
+        return 1.0 / duration
 
     @staticmethod
     def compare_with_expected(measured: float, expected: float) -> float:

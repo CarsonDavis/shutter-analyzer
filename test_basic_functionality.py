@@ -386,7 +386,7 @@ def run_analysis_pipeline(
             )
             error = ShutterSpeedCalculator.compare_with_expected(measured, expected)
             print(
-                f"  Event #{i+1}: Expected: 1/{1/expected:.0f}s, Measured: 1/{1/measured:.1f}s, Error: {error:.1f}%"
+                f"  Event #{i+1}: Expected: 1/{1/expected:.0f}s, Measured: 1/{measured:.1f}s, Error: {error:.1f}%"
             )
 
     video.release()
