@@ -132,6 +132,13 @@ Step-by-step instructions for users:
 - Account for slow-motion playback rates correctly
 - Sub-frame accuracy via intermediate frame weighting
 
+### NFR-4: Manual Verification Mode
+- Developer tool for validating event detection
+- Display frames at event boundaries side-by-side (frame before event, first frame of event)
+- Simple UI to step through each detected event
+- Shows frame number and brightness value on each frame
+- Allows quick visual confirmation that thresholds are working correctly
+
 ---
 
 ## Current Implementation Status
@@ -144,5 +151,6 @@ Step-by-step instructions for users:
 | FR-4: Line Graph | Complete |
 | FR-5: Results Table | Incomplete - no formatted markdown output, no color gradient |
 | FR-6: Output Location | Complete - `outputs/` structure created with examples |
+| NFR-4: Manual Verification | Not started |
 | DR-1: Theory Docs | Not started |
 | DR-2: How-To Guide | Not started |

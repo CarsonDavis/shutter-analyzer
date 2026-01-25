@@ -8,6 +8,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 |----------|---------|
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements |
+| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Step-by-step implementation instructions |
 | [architecture.md](architecture.md) | API documentation and technical details |
 
 ---
@@ -30,9 +31,10 @@ shutter-analyzer/
 │   └── research/                  # Market research and publishing guides
 ├── backup/                        # Extracted frames backup (gitignored)
 ├── test_basic_functionality.py    # Interactive test suite
-├── frames.py                      # Basic frame extraction utility
-├── frames_smart.py                # Smart frame extraction around events
+├── frames.py                      # Basic frame extraction utility (to be removed)
+├── frames_smart.py                # Smart frame extraction (to be removed)
 ├── REQUIREMENTS.md                # Project requirements
+├── IMPLEMENTATION_PLAN.md         # Implementation instructions
 ├── architecture.md                # API documentation
 └── INDEX.md                       # This file
 ```
