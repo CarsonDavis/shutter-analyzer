@@ -4,7 +4,9 @@ import android.net.Uri
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.shutteranalyzer.analysis.ShutterSpeedCalculator
 import com.shutteranalyzer.data.camera.CameraState
+import com.shutteranalyzer.data.camera.EventConverter
 import com.shutteranalyzer.data.camera.EventMarker
 import com.shutteranalyzer.data.camera.ShutterCameraManager
 import com.shutteranalyzer.data.repository.TestSessionRepository
@@ -95,8 +97,23 @@ class RecordingViewModel @Inject constructor(
     private var recordedVideoUri: Uri? = null
 
     init {
+        loadSessionData()
         observeCalibration()
         observeEvents()
+    }
+
+    /**
+     * Load expected speeds and FPS from the session.
+     */
+    private fun loadSessionData() {
+        viewModelScope.launch {
+            testSessionRepository.getSessionById(sessionId)?.let { session ->
+                if (session.expectedSpeeds.isNotEmpty()) {
+                    _expectedSpeeds.value = session.expectedSpeeds
+                }
+                _recordingFps.value = session.recordingFps.toInt()
+            }
+        }
     }
 
     private fun observeCalibration() {
@@ -166,11 +183,51 @@ class RecordingViewModel @Inject constructor(
     }
 
     /**
-     * Stop recording.
+     * Stop recording and save detected events.
      */
     fun stopRecording() {
         cameraManager.stopRecording()
+        saveDetectedEvents()
         _recordingState.value = RecordingState.Complete
+    }
+
+    /**
+     * Save detected events to the database with proper conversion.
+     */
+    private fun saveDetectedEvents() {
+        viewModelScope.launch {
+            val markers = cameraManager.getDetectedEvents()
+            if (markers.isEmpty()) return@launch
+
+            // Convert EventMarkers (timestamps) to ShutterEvents (frame indices)
+            val events = EventConverter.toShutterEvents(
+                markers = markers,
+                recordingStartTimestamp = cameraManager.getRecordingStartTimestamp(),
+                fps = _recordingFps.value.toDouble(),
+                baselineBrightness = cameraManager.getBaselineBrightness()
+            )
+
+            // Calculate measured shutter speeds
+            val measuredSpeeds = events.map { event ->
+                ShutterSpeedCalculator.calculateShutterSpeed(
+                    durationFrames = event.weightedDurationFrames,
+                    fps = _recordingFps.value.toDouble()
+                )
+            }
+
+            // Save events with expected speeds
+            testSessionRepository.saveEventsWithExpectedSpeeds(
+                sessionId = sessionId,
+                events = events,
+                measuredSpeeds = measuredSpeeds,
+                expectedSpeeds = _expectedSpeeds.value
+            )
+
+            // Save video URI if we have one
+            recordedVideoUri?.let { uri ->
+                testSessionRepository.updateVideoUri(sessionId, uri.toString())
+            }
+        }
     }
 
     /**

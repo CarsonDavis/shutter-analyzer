@@ -84,6 +84,9 @@ dependencies {
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.7")
 
+    // DataStore for settings persistence
+    implementation("androidx.datastore:datastore-preferences:1.0.0")
+
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 

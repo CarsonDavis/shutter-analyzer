@@ -22,6 +22,20 @@ data class ShutterSpeedResult(
 @Singleton
 class ShutterSpeedCalculator @Inject constructor() {
 
+    companion object {
+        /**
+         * Static helper to calculate shutter speed from duration frames.
+         *
+         * @param durationFrames Number of frames (can be weighted)
+         * @param fps Frames per second
+         * @return Shutter speed as 1/x (e.g., 500.0 for 1/500 second)
+         */
+        fun calculateShutterSpeed(durationFrames: Double, fps: Double): Double {
+            val duration = durationFrames / fps
+            return 1.0 / duration
+        }
+    }
+
     /**
      * Calculates the effective shutter speed as a fraction (1/x).
      *

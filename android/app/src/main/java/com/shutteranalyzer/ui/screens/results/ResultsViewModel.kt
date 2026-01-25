@@ -104,6 +104,9 @@ class ResultsViewModel @Inject constructor(
     private fun calculateResults(session: TestSession) {
         val calculatedResults = mutableListOf<ShutterResult>()
 
+        // Use stored expected speeds from session
+        val expectedSpeeds = session.expectedSpeeds
+
         session.events.forEachIndexed { index, event ->
             // Calculate measured duration
             val measuredSpeed = ShutterSpeedCalculator.calculateShutterSpeed(
@@ -112,9 +115,9 @@ class ResultsViewModel @Inject constructor(
             )
             val measuredMs = (1.0 / measuredSpeed) * 1000
 
-            // For demo purposes, we'll estimate expected speeds
-            // In a real implementation, these would be stored with the events
-            val expectedSpeed = estimateExpectedSpeed(index, session.events.size)
+            // Use stored expected speed, fall back to standard set only if not available
+            val expectedSpeed = expectedSpeeds.getOrNull(index)
+                ?: fallbackExpectedSpeed(index, session.events.size)
             val expectedMs = parseSpeedToMs(expectedSpeed)
 
             val deviation = if (expectedMs > 0) {
@@ -145,8 +148,10 @@ class ResultsViewModel @Inject constructor(
         }
     }
 
-    private fun estimateExpectedSpeed(index: Int, total: Int): String {
-        // Standard speed set
+    /**
+     * Fallback speed estimation for legacy sessions without stored expected speeds.
+     */
+    private fun fallbackExpectedSpeed(index: Int, total: Int): String {
         val speeds = listOf(
             "1/1000", "1/500", "1/250", "1/125", "1/60",
             "1/30", "1/15", "1/8", "1/4", "1/2", "1s"

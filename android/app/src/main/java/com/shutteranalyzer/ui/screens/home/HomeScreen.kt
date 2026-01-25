@@ -50,6 +50,7 @@ import java.time.Instant
  * @param onNewTestClick Callback when "New Test" button is clicked
  * @param onCameraClick Callback when a camera is clicked
  * @param onSettingsClick Callback when settings icon is clicked
+ * @param onImportClick Callback when "Import" button is clicked
  * @param viewModel The ViewModel for this screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -58,6 +59,7 @@ fun HomeScreen(
     onNewTestClick: () -> Unit,
     onCameraClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
+    onImportClick: () -> Unit,
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val cameras by viewModel.cameras.collectAsStateWithLifecycle()
@@ -84,9 +86,7 @@ fun HomeScreen(
         bottomBar = {
             BottomButtons(
                 onNewTestClick = onNewTestClick,
-                onImportClick = {
-                    // TODO: Implement video import
-                }
+                onImportClick = onImportClick
             )
         }
     ) { paddingValues ->

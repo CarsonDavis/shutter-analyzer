@@ -47,6 +47,26 @@ interface TestSessionRepository {
      * Delete a test session and all its events.
      */
     suspend fun deleteSession(session: TestSession)
+
+    /**
+     * Update the video URI for a session.
+     */
+    suspend fun updateVideoUri(sessionId: Long, uri: String)
+
+    /**
+     * Update the expected speeds for a session.
+     */
+    suspend fun updateExpectedSpeeds(sessionId: Long, expectedSpeeds: List<String>)
+
+    /**
+     * Save events with expected speeds and calculated deviations.
+     */
+    suspend fun saveEventsWithExpectedSpeeds(
+        sessionId: Long,
+        events: List<ShutterEvent>,
+        measuredSpeeds: List<Double>,
+        expectedSpeeds: List<String>
+    )
 }
 
 /**
@@ -107,15 +127,108 @@ class TestSessionRepositoryImpl @Inject constructor(
         testSessionDao.delete(session.toEntity())
     }
 
+    override suspend fun updateVideoUri(sessionId: Long, uri: String) {
+        testSessionDao.updateVideoUri(sessionId, uri)
+    }
+
+    override suspend fun updateExpectedSpeeds(sessionId: Long, expectedSpeeds: List<String>) {
+        val json = expectedSpeeds.joinToString(",")
+        testSessionDao.updateExpectedSpeeds(sessionId, json)
+    }
+
+    override suspend fun saveEventsWithExpectedSpeeds(
+        sessionId: Long,
+        events: List<ShutterEvent>,
+        measuredSpeeds: List<Double>,
+        expectedSpeeds: List<String>
+    ) {
+        // Update expected speeds on the session
+        updateExpectedSpeeds(sessionId, expectedSpeeds)
+
+        // Delete existing events first
+        shutterEventDao.deleteForSession(sessionId)
+
+        // Convert and insert new events with expected speeds and deviations
+        val entities = events.mapIndexed { index, event ->
+            val measured = measuredSpeeds.getOrElse(index) { 0.0 }
+            val expected = expectedSpeeds.getOrNull(index)
+            val deviation = if (expected != null && measured > 0) {
+                calculateDeviation(expected, measured)
+            } else {
+                null
+            }
+
+            ShutterEventEntity(
+                sessionId = sessionId,
+                startFrame = event.startFrame,
+                endFrame = event.endFrame,
+                expectedSpeed = expected,
+                measuredSpeed = measured,
+                deviationPercent = deviation,
+                brightnessValuesJson = event.brightnessValues.joinToString(",")
+            )
+        }
+        shutterEventDao.insertAll(entities)
+
+        // Update average deviation on session
+        val validDeviations = entities.mapNotNull { it.deviationPercent }
+        if (validDeviations.isNotEmpty()) {
+            val avgDeviation = validDeviations.average()
+            testSessionDao.updateAvgDeviation(sessionId, avgDeviation)
+        }
+    }
+
+    /**
+     * Calculate deviation percentage between expected and measured speeds.
+     *
+     * @param expected Expected speed as string (e.g., "1/500")
+     * @param measured Measured speed in seconds
+     * @return Deviation as percentage
+     */
+    private fun calculateDeviation(expected: String, measured: Double): Double {
+        val expectedSeconds = parseShutterSpeed(expected) ?: return 0.0
+        return ((measured - expectedSeconds) / expectedSeconds) * 100.0
+    }
+
+    /**
+     * Parse a shutter speed string to seconds.
+     *
+     * @param speed Speed string (e.g., "1/500", "1/60", "1")
+     * @return Speed in seconds, or null if parsing fails
+     */
+    private fun parseShutterSpeed(speed: String): Double? {
+        return try {
+            if (speed.contains("/")) {
+                val parts = speed.split("/")
+                if (parts.size == 2) {
+                    parts[0].toDouble() / parts[1].toDouble()
+                } else {
+                    null
+                }
+            } else {
+                speed.toDoubleOrNull()
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
     // Mapping functions
     private fun TestSessionEntity.toDomainModel(events: List<ShutterEvent>): TestSession {
+        val expectedSpeedsList = if (expectedSpeedsJson.isEmpty()) {
+            emptyList()
+        } else {
+            expectedSpeedsJson.split(",")
+        }
         return TestSession(
             id = id,
             cameraId = cameraId,
             recordingFps = recordingFps,
             testedAt = Instant.ofEpochMilli(testedAt),
             avgDeviationPercent = avgDeviationPercent,
-            events = events
+            events = events,
+            expectedSpeeds = expectedSpeedsList,
+            videoUri = videoUri
         )
     }
 
@@ -125,7 +238,9 @@ class TestSessionRepositoryImpl @Inject constructor(
             cameraId = cameraId,
             recordingFps = recordingFps,
             testedAt = testedAt.toEpochMilli(),
-            avgDeviationPercent = avgDeviationPercent
+            avgDeviationPercent = avgDeviationPercent,
+            expectedSpeedsJson = expectedSpeeds.joinToString(","),
+            videoUri = videoUri
         )
     }
 

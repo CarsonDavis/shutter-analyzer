@@ -37,5 +37,11 @@ data class TestSessionEntity(
     val testedAt: Long = System.currentTimeMillis(),
 
     /** Average deviation percentage across all events (null if not yet calculated) */
-    val avgDeviationPercent: Double? = null
+    val avgDeviationPercent: Double? = null,
+
+    /** Expected shutter speeds as comma-separated string (e.g., "1/500,1/250,1/125") */
+    val expectedSpeedsJson: String = "",
+
+    /** URI of the recorded video (null if not saved) */
+    val videoUri: String? = null
 )

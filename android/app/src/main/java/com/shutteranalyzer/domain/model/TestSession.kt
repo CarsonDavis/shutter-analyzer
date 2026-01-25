@@ -14,5 +14,7 @@ data class TestSession(
     val recordingFps: Double,
     val testedAt: Instant,
     val avgDeviationPercent: Double?,
-    val events: List<ShutterEvent> = emptyList()
+    val events: List<ShutterEvent> = emptyList(),
+    val expectedSpeeds: List<String> = emptyList(),
+    val videoUri: String? = null
 )

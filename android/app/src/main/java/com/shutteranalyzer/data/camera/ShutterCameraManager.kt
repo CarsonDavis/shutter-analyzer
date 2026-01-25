@@ -90,6 +90,7 @@ class ShutterCameraManager @Inject constructor(
     val isCalibrated: StateFlow<Boolean> = _isCalibrated.asStateFlow()
 
     private var eventIndex = 0
+    private var recordingStartTimestamp: Long = 0L
 
     init {
         setupFrameAnalyzerCallbacks()
@@ -240,6 +241,7 @@ class ShutterCameraManager @Inject constructor(
                     is VideoRecordEvent.Start -> {
                         _isRecording.value = true
                         _cameraState.value = CameraState.Recording
+                        recordingStartTimestamp = System.nanoTime()
                     }
                     is VideoRecordEvent.Finalize -> {
                         _isRecording.value = false
@@ -280,6 +282,16 @@ class ShutterCameraManager @Inject constructor(
      * Get detected events and their timestamps.
      */
     fun getDetectedEvents(): List<EventMarker> = _detectedEvents.value
+
+    /**
+     * Get the timestamp when recording started (nanoseconds).
+     */
+    fun getRecordingStartTimestamp(): Long = recordingStartTimestamp
+
+    /**
+     * Get the baseline brightness from calibration.
+     */
+    fun getBaselineBrightness(): Double = frameAnalyzer.currentBaseline
 
     /**
      * Release camera resources.

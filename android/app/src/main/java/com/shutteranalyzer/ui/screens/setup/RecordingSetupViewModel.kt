@@ -152,12 +152,13 @@ class RecordingSetupViewModel @Inject constructor(
             0L // No camera associated
         }
 
-        // Create test session
+        // Create test session with expected speeds
         val session = TestSession(
             cameraId = cameraId,
             recordingFps = _deviceFps.value.toDouble(),
             testedAt = Instant.now(),
-            avgDeviationPercent = null
+            avgDeviationPercent = null,
+            expectedSpeeds = selectedSpeeds.value
         )
 
         return testSessionRepository.saveSession(session)

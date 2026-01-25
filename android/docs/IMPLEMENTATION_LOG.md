@@ -611,9 +611,309 @@ permissionLauncher.launch(Manifest.permission.CAMERA)
 ```
 
 ### Next Steps
-- Phase 5: Analysis Pipeline Integration
-  - Connect recording flow to actual analysis
-  - Wire up event detection to results calculation
-  - Add video import flow
+- ~~Phase 5: Analysis Pipeline Integration~~ Integration gaps fixed (see below)
+
+---
+
+## 2025-01-25 - Phase 4.5: Analysis Pipeline Integration Fix
+
+### Problem Identified
+After Phase 4 UI implementation, the recording → analysis → results flow was not properly wired up:
+- Expected speeds selected by user were not persisted
+- EventMarker (timestamp-based) not converted to ShutterEvent (frame-based)
+- Events not saved to database after recording stopped
+- ResultsScreen was guessing expected speeds instead of using stored values
+
+### Changes Made
+
+#### Database Schema Update (v1 → v2)
+- `data/local/database/entity/TestSessionEntity.kt`
+  - Added `expectedSpeedsJson: String` - comma-separated expected speeds (e.g., "1/500,1/250,1/125")
+  - Added `videoUri: String?` - URI of recorded video for later playback
+
+- `data/local/database/AppDatabase.kt`
+  - Incremented version from 1 to 2
+  - Added `MIGRATION_1_2` to add new columns via ALTER TABLE
+
+- `data/local/database/dao/TestSessionDao.kt`
+  - Added `updateVideoUri()` method
+  - Added `updateExpectedSpeeds()` method
+
+- `di/DatabaseModule.kt`
+  - Added `.addMigrations(AppDatabase.MIGRATION_1_2)` to Room builder
+
+#### Domain Model Update
+- `domain/model/TestSession.kt`
+  - Added `expectedSpeeds: List<String>` field
+  - Added `videoUri: String?` field
+
+#### New EventConverter
+- `data/camera/EventConverter.kt` (NEW FILE)
+  - `toShutterEvent()` - converts single EventMarker to ShutterEvent
+  - `toShutterEvents()` - batch conversion
+  - `timestampToFrame()` - formula: `(timestamp - startTimestamp) / 1e9 * fps`
+
+#### Camera Manager Updates
+- `data/camera/ShutterCameraManager.kt`
+  - Added `recordingStartTimestamp` private var
+  - Set timestamp in `VideoRecordEvent.Start` handler
+  - Added `getRecordingStartTimestamp()` method
+  - Added `getBaselineBrightness()` method (from frameAnalyzer)
+
+#### Repository Updates
+- `data/repository/TestSessionRepository.kt`
+  - Added interface methods: `updateVideoUri()`, `updateExpectedSpeeds()`, `saveEventsWithExpectedSpeeds()`
+  - Added `saveEventsWithExpectedSpeeds()` implementation:
+    - Saves events with expected speeds and calculated deviations
+    - Calculates and updates average deviation on session
+  - Added `calculateDeviation()` and `parseShutterSpeed()` helper methods
+  - Updated `toDomainModel()` to parse expectedSpeedsJson
+  - Updated `toEntity()` to serialize expectedSpeeds
+
+#### ViewModel Updates
+- `ui/screens/setup/RecordingSetupViewModel.kt`
+  - Updated `createSession()` to include `expectedSpeeds` from `selectedSpeeds.value`
+
+- `ui/screens/recording/RecordingViewModel.kt`
+  - Added imports for EventConverter and ShutterSpeedCalculator
+  - Added `loadSessionData()` to load expected speeds from DB on init
+  - Added `saveDetectedEvents()` method:
+    - Converts EventMarkers to ShutterEvents via EventConverter
+    - Calculates measured speeds via ShutterSpeedCalculator
+    - Saves events with expected speeds via repository
+    - Saves video URI if available
+  - Updated `stopRecording()` to call `saveDetectedEvents()`
+
+- `ui/screens/results/ResultsViewModel.kt`
+  - Updated `calculateResults()` to use `session.expectedSpeeds` from database
+  - Renamed `estimateExpectedSpeed()` to `fallbackExpectedSpeed()` (only used for legacy sessions)
+
+#### Analysis Module Update
+- `analysis/ShutterSpeedCalculator.kt`
+  - Added companion object with static `calculateShutterSpeed(durationFrames, fps)` helper
+
+### Data Flow After Fix
+
+```
+Setup Screen
+  └─ User selects speeds ["1/500", "1/250", "1/125"]
+  └─ createSession() saves TestSession with expectedSpeeds
+        │
+        ▼ sessionId
+Recording Screen
+  └─ loadSessionData() retrieves expectedSpeeds from DB
+  └─ LiveEventDetector produces EventMarkers (timestamps)
+  └─ stopRecording() → EventConverter → ShutterEvents (frame indices)
+  └─ saveEventsWithExpectedSpeeds() stores everything
+        │
+        ▼ sessionId
+Results Screen
+  └─ getSessionById() loads session with expectedSpeeds
+  └─ calculateResults() uses stored speeds (not guesses!)
+  └─ Accurate deviation displayed
+```
+
+### Migration Strategy
+- Room migration v1→v2 adds columns with defaults
+- Existing sessions (if any) get empty expectedSpeedsJson
+- ResultsViewModel falls back to standard speeds for legacy sessions
+
+### Files Modified Summary
+| File | Change Type |
+|------|-------------|
+| `data/local/database/entity/TestSessionEntity.kt` | Add fields |
+| `data/local/database/AppDatabase.kt` | Add migration |
+| `data/local/database/dao/TestSessionDao.kt` | Add methods |
+| `di/DatabaseModule.kt` | Add migration |
+| `domain/model/TestSession.kt` | Add fields |
+| `data/camera/EventConverter.kt` | **NEW FILE** |
+| `data/camera/ShutterCameraManager.kt` | Add timestamp tracking |
+| `data/repository/TestSessionRepository.kt` | Add methods, update mappings |
+| `analysis/ShutterSpeedCalculator.kt` | Add static helper |
+| `ui/screens/setup/RecordingSetupViewModel.kt` | Pass expected speeds |
+| `ui/screens/recording/RecordingViewModel.kt` | Load speeds, save events |
+| `ui/screens/results/ResultsViewModel.kt` | Use stored expected speeds |
+
+### Next Steps
+- ~~Phase 5: Secondary Screens~~ ✅ Complete (see below)
+- Phase 6: Polish & Testing
+- Phase 7: Publishing
+
+---
+
+## 2025-01-25 - Phase 5: Secondary Screens Implementation
+
+### Overview
+Implemented all 4 secondary screens: Settings, Camera Detail, Onboarding, and Import Video.
+
+### Changes Made
+
+#### DataStore Infrastructure
+- `data/local/datastore/SettingsDataStore.kt` (NEW)
+  - `SpeedSet` enum: STANDARD, FAST, SLOW, CUSTOM
+  - `Sensitivity` enum: LOW, NORMAL, HIGH with margin factors
+  - `AppSettings` data class for persisted settings
+  - Preference keys: `default_speed_set`, `detection_sensitivity`, `has_seen_onboarding`
+
+- `data/repository/SettingsRepository.kt` (NEW)
+  - Interface + implementation for settings access
+  - Methods: `setDefaultSpeedSet()`, `setDetectionSensitivity()`, `setHasSeenOnboarding()`
+
+- `di/DataStoreModule.kt` (NEW)
+  - Hilt module providing SettingsDataStore singleton
+  - Binds SettingsRepositoryImpl to SettingsRepository
+
+#### Settings Screen
+- `ui/screens/settings/SettingsViewModel.kt` (NEW)
+  - Settings state from repository
+  - Actions: setDefaultSpeedSet, setDetectionSensitivity, resetOnboarding
+
+- `ui/screens/settings/SettingsScreen.kt` (NEW)
+  - Section: Recording - Default speed set radio buttons
+  - Section: Detection - Sensitivity slider (Low/Normal/High)
+  - Section: Help - View Tutorial, How It Works
+  - Section: About - Version, Copyright
+
+#### Camera Detail Screen
+- `ui/screens/camera/CameraDetailViewModel.kt` (NEW)
+  - Loads camera and sessions by ID
+  - Edit name dialog state management
+  - Delete confirmation with cascade
+
+- `ui/screens/camera/CameraDetailScreen.kt` (NEW)
+  - Header with editable camera name
+  - Session history list with AccuracyIndicator badges
+  - Tap session → Results screen
+  - Test Again and Delete buttons
+
+#### Onboarding Screen
+- `ui/screens/onboarding/OnboardingScreen.kt` (NEW)
+  - HorizontalPager with 5 pages:
+    1. Welcome - app description
+    2. Equipment Setup - tripod positioning
+    3. Lighting - requirements
+    4. Framing - how to position phone
+    5. Ready to Test - start instructions
+  - Skip button (always visible)
+  - Page indicator dots
+  - Next/Get Started button
+
+#### Import Video Screen
+- `data/video/VideoAnalyzer.kt` (NEW)
+  - `getVideoInfo()` - extracts metadata via MediaMetadataRetriever
+  - `analyzeVideo()` - extracts frames, calculates brightness, detects events
+  - `calculateBitmapBrightness()` - samples pixels for luminance
+  - Reuses existing EventDetector and ThresholdCalculator
+
+- `ui/screens/import/ImportViewModel.kt` (NEW)
+  - `ImportState` sealed class: SelectFile, Loading, VideoSelected, Analyzing, AssignSpeeds, Complete, Error
+  - Video selection and metadata extraction
+  - Analysis with progress callback
+  - Speed assignment per event
+  - Session creation with events
+
+- `ui/screens/import/ImportScreen.kt` (NEW)
+  - Step 1: File picker + video info display
+  - Step 2: Event list with speed assignment dropdowns
+  - Progress indicator during analysis
+  - Error state with retry
+
+#### Navigation Updates
+- `ui/navigation/NavGraph.kt`
+  - Added 4 new routes: Settings, Onboarding, CameraDetail, Import
+  - Wired HomeScreen callbacks to new screens
+
+- `ui/screens/home/HomeScreen.kt`
+  - Added `onImportClick` callback parameter
+  - Wired all navigation callbacks
+
+- `MainActivity.kt`
+  - Inject SettingsRepository
+  - Check hasSeenOnboarding flag on launch
+  - Conditionally start at Onboarding or Home
+  - Mark onboarding complete when reaching Home
+
+#### Dependencies Added
+- `app/build.gradle.kts`
+  - `androidx.datastore:datastore-preferences:1.0.0`
+
+### New Files Summary
+
+```
+data/local/datastore/
+└── SettingsDataStore.kt
+
+data/repository/
+└── SettingsRepository.kt
+
+data/video/
+└── VideoAnalyzer.kt
+
+di/
+└── DataStoreModule.kt
+
+ui/screens/
+├── settings/
+│   ├── SettingsScreen.kt
+│   └── SettingsViewModel.kt
+├── camera/
+│   ├── CameraDetailScreen.kt
+│   └── CameraDetailViewModel.kt
+├── onboarding/
+│   └── OnboardingScreen.kt
+└── import/
+    ├── ImportScreen.kt
+    └── ImportViewModel.kt
+```
+
+### Project Structure After Phase 5
+
+```
+android/app/src/main/java/com/shutteranalyzer/
+├── ShutterAnalyzerApp.kt
+├── MainActivity.kt                  # Updated - onboarding check
+├── analysis/                        # Phase 1
+├── data/
+│   ├── local/
+│   │   ├── database/                # Phase 2
+│   │   └── datastore/               # Phase 5 (NEW)
+│   │       └── SettingsDataStore.kt
+│   ├── repository/                  # Phase 2, 5
+│   │   ├── CameraRepository.kt
+│   │   ├── TestSessionRepository.kt
+│   │   └── SettingsRepository.kt    # NEW
+│   ├── camera/                      # Phase 3, 4.5
+│   └── video/                       # Phase 5 (NEW)
+│       └── VideoAnalyzer.kt
+├── domain/model/                    # Phase 2
+├── di/
+│   ├── DatabaseModule.kt
+│   ├── DataStoreModule.kt           # Phase 5 (NEW)
+│   ├── RepositoryModule.kt
+│   └── CameraModule.kt
+└── ui/
+    ├── navigation/NavGraph.kt       # Updated
+    ├── theme/
+    ├── components/
+    └── screens/
+        ├── home/
+        ├── setup/
+        ├── recording/
+        ├── review/
+        ├── results/
+        ├── settings/                # Phase 5 (NEW)
+        ├── camera/                  # Phase 5 (NEW)
+        ├── onboarding/              # Phase 5 (NEW)
+        └── import/                  # Phase 5 (NEW)
+```
+
+### Next Steps
+- Phase 6: Polish & Testing
+  - Error handling improvements
+  - Empty states refinement
+  - Loading states
+  - Haptic feedback
+  - Accessibility
+- Phase 7: Publishing
 
 ---

@@ -6,10 +6,14 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import com.shutteranalyzer.ui.screens.camera.CameraDetailScreen
 import com.shutteranalyzer.ui.screens.home.HomeScreen
+import com.shutteranalyzer.ui.screens.import.ImportScreen
+import com.shutteranalyzer.ui.screens.onboarding.OnboardingScreen
 import com.shutteranalyzer.ui.screens.recording.RecordingScreen
 import com.shutteranalyzer.ui.screens.results.ResultsScreen
 import com.shutteranalyzer.ui.screens.review.EventReviewScreen
+import com.shutteranalyzer.ui.screens.settings.SettingsScreen
 import com.shutteranalyzer.ui.screens.setup.RecordingSetupScreen
 
 /**
@@ -27,6 +31,12 @@ sealed class Screen(val route: String) {
     object Results : Screen("results/{sessionId}") {
         fun createRoute(sessionId: Long) = "results/$sessionId"
     }
+    object Settings : Screen("settings")
+    object Onboarding : Screen("onboarding")
+    object CameraDetail : Screen("camera/{cameraId}") {
+        fun createRoute(cameraId: Long) = "camera/$cameraId"
+    }
+    object Import : Screen("import")
 }
 
 /**
@@ -51,10 +61,13 @@ fun NavGraph(
                     navController.navigate(Screen.RecordingSetup.route)
                 },
                 onCameraClick = { cameraId ->
-                    // TODO: Navigate to camera detail screen
+                    navController.navigate(Screen.CameraDetail.createRoute(cameraId))
                 },
                 onSettingsClick = {
-                    // TODO: Navigate to settings screen
+                    navController.navigate(Screen.Settings.route)
+                },
+                onImportClick = {
+                    navController.navigate(Screen.Import.route)
                 }
             )
         }
@@ -129,6 +142,63 @@ fun NavGraph(
                 },
                 onTestAgain = {
                     navController.navigate(Screen.RecordingSetup.route) {
+                        popUpTo(Screen.Home.route)
+                    }
+                }
+            )
+        }
+
+        // Settings screen
+        composable(route = Screen.Settings.route) {
+            SettingsScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onViewTutorial = {
+                    navController.navigate(Screen.Onboarding.route)
+                }
+            )
+        }
+
+        // Camera detail screen
+        composable(
+            route = Screen.CameraDetail.route,
+            arguments = listOf(navArgument("cameraId") { type = NavType.LongType })
+        ) { backStackEntry ->
+            val cameraId = backStackEntry.arguments?.getLong("cameraId") ?: return@composable
+            CameraDetailScreen(
+                cameraId = cameraId,
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onSessionClick = { sessionId ->
+                    navController.navigate(Screen.Results.createRoute(sessionId))
+                },
+                onTestAgain = {
+                    navController.navigate(Screen.RecordingSetup.route)
+                }
+            )
+        }
+
+        // Onboarding screen
+        composable(route = Screen.Onboarding.route) {
+            OnboardingScreen(
+                onComplete = {
+                    navController.navigate(Screen.Home.route) {
+                        popUpTo(Screen.Onboarding.route) { inclusive = true }
+                    }
+                }
+            )
+        }
+
+        // Import screen
+        composable(route = Screen.Import.route) {
+            ImportScreen(
+                onBackClick = {
+                    navController.popBackStack()
+                },
+                onComplete = { sessionId ->
+                    navController.navigate(Screen.Results.createRoute(sessionId)) {
                         popUpTo(Screen.Home.route)
                     }
                 }

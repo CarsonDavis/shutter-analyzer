@@ -49,4 +49,16 @@ interface TestSessionDao {
      */
     @Query("DELETE FROM test_sessions WHERE cameraId = :cameraId")
     suspend fun deleteAllForCamera(cameraId: Long)
+
+    /**
+     * Update the video URI for a session.
+     */
+    @Query("UPDATE test_sessions SET videoUri = :uri WHERE id = :sessionId")
+    suspend fun updateVideoUri(sessionId: Long, uri: String)
+
+    /**
+     * Update the expected speeds for a session.
+     */
+    @Query("UPDATE test_sessions SET expectedSpeedsJson = :expectedSpeedsJson WHERE id = :sessionId")
+    suspend fun updateExpectedSpeeds(sessionId: Long, expectedSpeedsJson: String)
 }

@@ -3,6 +3,8 @@ package com.shutteranalyzer.data.local.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import com.shutteranalyzer.data.local.database.converter.Converters
 import com.shutteranalyzer.data.local.database.dao.CameraDao
 import com.shutteranalyzer.data.local.database.dao.ShutterEventDao
@@ -22,7 +24,7 @@ import com.shutteranalyzer.data.local.database.entity.TestSessionEntity
         TestSessionEntity::class,
         ShutterEventEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -36,5 +38,19 @@ abstract class AppDatabase : RoomDatabase() {
 
     companion object {
         const val DATABASE_NAME = "shutter_analyzer.db"
+
+        /**
+         * Migration from version 1 to 2: Add expectedSpeedsJson and videoUri to test_sessions.
+         */
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE test_sessions ADD COLUMN expectedSpeedsJson TEXT NOT NULL DEFAULT ''"
+                )
+                db.execSQL(
+                    "ALTER TABLE test_sessions ADD COLUMN videoUri TEXT"
+                )
+            }
+        }
     }
 }
