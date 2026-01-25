@@ -9,6 +9,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements (CLI tool) |
 | [docs/ANDROID_APP_SPEC.md](docs/ANDROID_APP_SPEC.md) | **Android app specification** - screens, flows, requirements |
+| [docs/ANDROID_WIREFRAMES.md](docs/ANDROID_WIREFRAMES.md) | **Android wireframes** - ASCII mockups for all screens |
 | [docs/THEORY.md](docs/THEORY.md) | Theory of shutter speed measurement |
 | [docs/HOW_TO.md](docs/HOW_TO.md) | Step-by-step usage guide |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
