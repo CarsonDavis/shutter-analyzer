@@ -90,9 +90,32 @@ class VideoAnalyzer @Inject constructor(
     }
 
     /**
-     * Estimate frame rate by sampling frames.
+     * Estimate frame rate from video metadata.
+     *
+     * Tries multiple approaches:
+     * 1. VIDEO_FRAME_COUNT / duration (most accurate when available)
+     * 2. Falls back to 30fps (common for standard recordings)
+     *
+     * Note: For slow-motion videos (120, 240, 480 fps), the user should
+     * manually specify the recording FPS in the import settings.
      */
     private fun estimateFrameRate(durationMs: Long, retriever: MediaMetadataRetriever): Double {
+        // Try to get frame count (API 28+)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.P) {
+            val frameCount = retriever.extractMetadata(
+                MediaMetadataRetriever.METADATA_KEY_VIDEO_FRAME_COUNT
+            )?.toIntOrNull()
+
+            if (frameCount != null && frameCount > 0 && durationMs > 0) {
+                val durationSeconds = durationMs / 1000.0
+                val calculatedFps = frameCount / durationSeconds
+                // Sanity check: fps should be between 1 and 960
+                if (calculatedFps in 1.0..960.0) {
+                    return calculatedFps
+                }
+            }
+        }
+
         // Default to 30fps if we can't determine
         // In practice, slow-mo videos are typically 120, 240, or 480 fps
         // but standard recordings are 30 or 60 fps

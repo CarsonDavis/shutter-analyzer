@@ -104,30 +104,45 @@ class ResultsViewModel @Inject constructor(
         loadSessionAndCalculate()
     }
 
+    /**
+     * Error message if loading fails.
+     */
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
     private fun loadSessionAndCalculate() {
         viewModelScope.launch {
             _isLoading.value = true
+            _errorMessage.value = null
 
-            val loadedSession = testSessionRepository.getSessionById(sessionId)
-            _session.value = loadedSession
+            try {
+                val loadedSession = testSessionRepository.getSessionById(sessionId)
+                _session.value = loadedSession
 
-            loadedSession?.let { session ->
+                if (loadedSession == null) {
+                    _errorMessage.value = "Session not found"
+                    _isLoading.value = false
+                    return@launch
+                }
+
                 // Format test date
-                _testDate.value = formatDate(session.testedAt)
+                _testDate.value = formatDate(loadedSession.testedAt)
 
                 // Load camera if associated
-                if (session.cameraId > 0) {
-                    _camera.value = cameraRepository.getCameraById(session.cameraId)
+                if (loadedSession.cameraId > 0) {
+                    _camera.value = cameraRepository.getCameraById(loadedSession.cameraId)
                 }
 
                 // Calculate results from events
-                calculateResults(session)
+                calculateResults(loadedSession)
 
                 // Build timeline data for brightness chart
-                buildTimelineData(session)
+                buildTimelineData(loadedSession)
+            } catch (e: Exception) {
+                _errorMessage.value = "Failed to load session: ${e.message ?: "Unknown error"}"
+            } finally {
+                _isLoading.value = false
             }
-
-            _isLoading.value = false
         }
     }
 

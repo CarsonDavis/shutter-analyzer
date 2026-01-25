@@ -63,9 +63,9 @@ class ShutterCameraManager @Inject constructor(
     private val frameAnalyzer: FrameAnalyzer
 ) {
     private var cameraProvider: ProcessCameraProvider? = null
-    private var videoCapture: VideoCapture<Recorder>? = null
-    private var recording: Recording? = null
-    private var imageAnalysis: ImageAnalysis? = null
+    @Volatile private var videoCapture: VideoCapture<Recorder>? = null
+    @Volatile private var recording: Recording? = null
+    @Volatile private var imageAnalysis: ImageAnalysis? = null
     private var preview: Preview? = null
 
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()

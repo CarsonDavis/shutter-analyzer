@@ -36,6 +36,16 @@ class ThresholdCalculator @Inject constructor() {
      * @param expectedEventsCount Expected number of shutter events (needed for ZSCORE method)
      * @return BrightnessStats with calculated threshold
      */
+    /**
+     * Analyzes the brightness distribution of all frames to determine threshold.
+     *
+     * @param brightnessValues List of brightness values for all frames
+     * @param percentileThreshold Percentile to use for baseline determination (default: 25)
+     * @param marginFactor Factor to multiply with (median-baseline) to determine threshold (default: 1.5)
+     * @param method Method to use for threshold calculation
+     * @param expectedEventsCount Expected number of shutter events (needed for ZSCORE method)
+     * @return BrightnessStats with calculated threshold, or null if input is empty
+     */
     fun analyzeBrightnessDistribution(
         brightnessValues: List<Double>,
         percentileThreshold: Int = 25,
@@ -43,7 +53,18 @@ class ThresholdCalculator @Inject constructor() {
         method: ThresholdMethod = ThresholdMethod.ORIGINAL,
         expectedEventsCount: Int? = null
     ): BrightnessStats {
-        require(brightnessValues.isNotEmpty()) { "Brightness values cannot be empty" }
+        if (brightnessValues.isEmpty()) {
+            // Return sensible defaults for empty input
+            return BrightnessStats(
+                minBrightness = 0.0,
+                maxBrightness = 0.0,
+                meanBrightness = 0.0,
+                medianBrightness = 0.0,
+                percentiles = emptyMap(),
+                baseline = 0.0,
+                threshold = 0.0
+            )
+        }
 
         // Calculate statistics
         val minBrightness = brightnessValues.minOrNull()!!

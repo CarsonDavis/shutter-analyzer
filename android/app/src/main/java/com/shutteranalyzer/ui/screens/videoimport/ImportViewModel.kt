@@ -168,63 +168,70 @@ class ImportViewModel @Inject constructor(
 
     /**
      * Create a session with the imported events.
+     *
+     * This function launches a coroutine to create the session asynchronously.
+     * When complete, the importState will be set to ImportState.Complete with the session ID.
      */
-    fun createSession(): Long? {
-        val result = analysisResult ?: return null
-        val info = _videoInfo.value ?: return null
+    fun createSession() {
+        val result = analysisResult ?: run {
+            _importState.value = ImportState.Error("No analysis result available")
+            return
+        }
+        val info = _videoInfo.value ?: run {
+            _importState.value = ImportState.Error("No video info available")
+            return
+        }
         val speeds = _assignedSpeeds.value
         val fps = _customFrameRate.value ?: info.frameRate
 
-        var sessionId: Long? = null
-
         viewModelScope.launch {
-            // Create camera if name provided
-            val cameraId = if (_cameraName.value.isNotBlank()) {
-                val camera = Camera(
-                    name = _cameraName.value.trim(),
-                    createdAt = Instant.now()
+            try {
+                // Create camera if name provided
+                val cameraId = if (_cameraName.value.isNotBlank()) {
+                    val camera = Camera(
+                        name = _cameraName.value.trim(),
+                        createdAt = Instant.now()
+                    )
+                    cameraRepository.saveCamera(camera)
+                } else {
+                    0L
+                }
+
+                // Create expected speeds list in order
+                val expectedSpeeds = result.events.indices.map { index ->
+                    speeds[index] ?: "1/60"
+                }
+
+                // Create test session
+                val session = TestSession(
+                    cameraId = cameraId,
+                    recordingFps = fps,
+                    testedAt = Instant.now(),
+                    avgDeviationPercent = null,
+                    events = result.events,
+                    expectedSpeeds = expectedSpeeds,
+                    videoUri = _videoUri.value?.toString()
                 )
-                cameraRepository.saveCamera(camera)
-            } else {
-                0L
-            }
 
-            // Create expected speeds list in order
-            val expectedSpeeds = result.events.indices.map { index ->
-                speeds[index] ?: "1/60"
-            }
+                val sessionId = testSessionRepository.saveSession(session)
 
-            // Create test session
-            val session = TestSession(
-                cameraId = cameraId,
-                recordingFps = fps,
-                testedAt = Instant.now(),
-                avgDeviationPercent = null,
-                events = result.events,
-                expectedSpeeds = expectedSpeeds,
-                videoUri = _videoUri.value?.toString()
-            )
+                // Calculate measured speeds and save events
+                val measuredSpeeds = result.events.map { event ->
+                    val duration = event.weightedDurationFrames / fps
+                    1.0 / duration
+                }
 
-            sessionId = testSessionRepository.saveSession(session)
-
-            // Calculate measured speeds and save events
-            val measuredSpeeds = result.events.map { event ->
-                val duration = event.weightedDurationFrames / fps
-                1.0 / duration
-            }
-
-            sessionId?.let { id ->
                 testSessionRepository.saveEventsWithExpectedSpeeds(
-                    sessionId = id,
+                    sessionId = sessionId,
                     events = result.events,
                     measuredSpeeds = measuredSpeeds,
                     expectedSpeeds = expectedSpeeds
                 )
-                _importState.value = ImportState.Complete(id)
+                _importState.value = ImportState.Complete(sessionId)
+            } catch (e: Exception) {
+                _importState.value = ImportState.Error("Failed to create session: ${e.message}")
             }
         }
-
-        return sessionId
     }
 
     /**

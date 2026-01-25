@@ -1149,6 +1149,87 @@ Made the app production-ready with proper error handling, accessibility improvem
 - Warnings: 4 deprecation warnings (LocalLifecycleOwner, menuAnchor, statusBarColor) - non-blocking
 
 ### Next Steps
+- Phase 7 Part 2: Comprehensive Bug Fixes ✅
+
+---
+
+## 2025-01-25 - Phase 7 Part 2: Comprehensive Bug Fixes
+
+### Overview
+Fixed all bugs identified in a comprehensive code audit, addressing CRITICAL, HIGH, and MEDIUM priority issues to make the app production-ready.
+
+### CRITICAL Fixes
+
+#### 1. MainActivity - runBlocking on UI Thread
+- **Problem**: `runBlocking { settingsRepository.setHasSeenOnboarding(true) }` blocked the UI thread
+- **Fix**: Changed to `lifecycleScope.launch { }` for non-blocking execution
+- **File**: `MainActivity.kt`
+
+#### 2. ShutterCameraManager - Thread-Unsafe Mutable State
+- **Problem**: `videoCapture`, `recording`, `imageAnalysis` accessed from different threads without synchronization
+- **Fix**: Added `@Volatile` annotation to ensure visibility across threads
+- **File**: `data/camera/ShutterCameraManager.kt`
+
+#### 3. ImportViewModel - createSession Returns Null
+- **Problem**: `createSession()` launched coroutine but returned before completion, returning null
+- **Fix**: Changed function to return `Unit`, added proper error handling with try-catch
+- **File**: `ui/screens/videoimport/ImportViewModel.kt`
+
+### HIGH Priority Fixes
+
+#### 4. VideoAnalyzer - Better FPS Estimation
+- **Problem**: `estimateFrameRate()` always returned hardcoded 30 FPS
+- **Fix**: Added frame count extraction on API 28+ using `METADATA_KEY_VIDEO_FRAME_COUNT`
+- **File**: `data/video/VideoAnalyzer.kt`
+
+#### 5. RecordingViewModel - advanceToNextSpeed Race Condition
+- **Problem**: `observeCalibration()` called `advanceToNextSpeed()` which incremented index from 0 to 1, skipping the first speed
+- **Fix**:
+  - Changed `observeCalibration()` to call `startWaitingForFirstShutter()` instead
+  - Added `lastProcessedEventCount` to track processed events
+  - Added state check in `observeEvents()` to only process when in `WaitingForShutter` state
+  - Reset counters in `startRecording()`
+- **File**: `ui/screens/recording/RecordingViewModel.kt`
+
+### MEDIUM Priority Fixes
+
+#### 6. ResultsViewModel - Missing Error Handling
+- **Problem**: `loadSessionAndCalculate()` had no try-catch, database errors would crash the app
+- **Fix**: Added try-catch with `errorMessage: StateFlow<String?>` for UI error display
+- **File**: `ui/screens/results/ResultsViewModel.kt`
+
+#### 7. ThresholdCalculator - Empty List Handling
+- **Problem**: `require(brightnessValues.isNotEmpty())` would throw exception on empty input
+- **Fix**: Return sensible defaults (all zeros) instead of throwing
+- **File**: `analysis/ThresholdCalculator.kt`
+
+### Already Addressed (Verified)
+- Chart components already had empty state checks (`if (results.isEmpty()) return`)
+- OnboardingScreen doesn't request permissions (handled in RecordingSetupScreen)
+- BrightnessAnalyzer division by zero handled by OpenCV's `Core.mean()`
+- Extension functions `median()`, `percentile()`, `stdDev()` already return 0.0 for empty lists
+
+### Files Modified Summary
+
+| File | Priority | Changes |
+|------|----------|---------|
+| `MainActivity.kt` | CRITICAL | Replace runBlocking with lifecycleScope.launch |
+| `ShutterCameraManager.kt` | CRITICAL | Add @Volatile to videoCapture, recording, imageAnalysis |
+| `ImportViewModel.kt` | CRITICAL | Make createSession return Unit, add error handling |
+| `VideoAnalyzer.kt` | HIGH | Extract FPS from frame count on API 28+ |
+| `RecordingViewModel.kt` | HIGH | Fix advanceToNextSpeed race condition with state checks |
+| `ResultsViewModel.kt` | MEDIUM | Add try-catch and errorMessage state |
+| `ThresholdCalculator.kt` | MEDIUM | Return defaults for empty input instead of throwing |
+
+### Testing Checklist
+- [ ] Camera initialization: Start recording → camera preview shows → calibration starts
+- [ ] First speed shown: After calibration, first speed (e.g., 1/1000) displays, not second
+- [ ] Import video: Import completes without crash, session created
+- [ ] Results loading: Results screen shows loading state, then data
+- [ ] Empty session: Session with 0 events shows helpful message
+- [ ] Permission denied: Deny camera → shows dialog with Settings button
+
+### Next Steps
 - Phase 8: Publishing
 
 ---

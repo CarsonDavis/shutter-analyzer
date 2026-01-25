@@ -120,31 +120,44 @@ class RecordingViewModel @Inject constructor(
         viewModelScope.launch {
             cameraManager.isCalibrated.collect { calibrated ->
                 if (calibrated && _recordingState.value is RecordingState.Calibrating) {
-                    advanceToNextSpeed()
+                    // Start waiting for the first speed, don't advance (which would skip index 0)
+                    startWaitingForFirstShutter()
                 }
             }
         }
     }
 
+    /** Track the number of events we've already processed to avoid reprocessing */
+    private var lastProcessedEventCount = 0
+
     private fun observeEvents() {
         viewModelScope.launch {
             cameraManager.detectedEvents.collect { events ->
-                if (events.isNotEmpty()) {
-                    val lastEvent = events.last()
-                    val currentIndex = _currentSpeedIndex.value
-                    val speeds = _expectedSpeeds.value
+                // Only process new events when we're waiting for a shutter event
+                val currentState = _recordingState.value
+                if (currentState !is RecordingState.WaitingForShutter) {
+                    return@collect
+                }
 
-                    if (currentIndex < speeds.size) {
-                        _recordingState.value = RecordingState.EventDetected(
-                            speed = speeds[currentIndex],
-                            index = currentIndex
-                        )
+                // Only process if there are new events since last processing
+                if (events.size <= lastProcessedEventCount) {
+                    return@collect
+                }
+                lastProcessedEventCount = events.size
 
-                        // Auto-advance after a brief delay
-                        viewModelScope.launch {
-                            kotlinx.coroutines.delay(1000)
-                            advanceToNextSpeed()
-                        }
+                val currentIndex = _currentSpeedIndex.value
+                val speeds = _expectedSpeeds.value
+
+                if (currentIndex < speeds.size) {
+                    _recordingState.value = RecordingState.EventDetected(
+                        speed = speeds[currentIndex],
+                        index = currentIndex
+                    )
+
+                    // Auto-advance after a brief delay
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(1000)
+                        advanceToNextSpeed()
                     }
                 }
             }
@@ -159,6 +172,13 @@ class RecordingViewModel @Inject constructor(
     }
 
     /**
+     * Bind camera preview to the lifecycle.
+     */
+    fun bindCameraPreview(lifecycleOwner: androidx.lifecycle.LifecycleOwner, previewView: androidx.camera.view.PreviewView) {
+        cameraManager.bindPreview(lifecycleOwner, previewView)
+    }
+
+    /**
      * Set the expected speeds to test.
      */
     fun setExpectedSpeeds(speeds: List<String>) {
@@ -170,6 +190,8 @@ class RecordingViewModel @Inject constructor(
      */
     fun startRecording() {
         _recordingState.value = RecordingState.Calibrating
+        _currentSpeedIndex.value = 0
+        lastProcessedEventCount = 0
         cameraManager.resetCalibration()
 
         cameraManager.startRecording(

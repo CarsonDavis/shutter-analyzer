@@ -39,7 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -86,10 +88,18 @@ fun RecordingScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
+    // Track if camera is initialized and preview is bound
+    var cameraInitialized by remember { mutableStateOf(false) }
+    var previewBound by remember { mutableStateOf(false) }
+
     // Initialize camera
     LaunchedEffect(Unit) {
-        val success = viewModel.initializeCamera()
-        if (success) {
+        cameraInitialized = viewModel.initializeCamera()
+    }
+
+    // Start recording only after camera is initialized AND preview is bound
+    LaunchedEffect(cameraInitialized, previewBound) {
+        if (cameraInitialized && previewBound) {
             viewModel.startRecording()
         }
     }
@@ -102,11 +112,14 @@ fun RecordingScreen(
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // Camera preview
-        CameraPreviewView(
-            viewModel = viewModel,
-            modifier = Modifier.fillMaxSize()
-        )
+        // Camera preview - only show after camera is initialized
+        if (cameraInitialized) {
+            CameraPreviewView(
+                viewModel = viewModel,
+                modifier = Modifier.fillMaxSize(),
+                onPreviewBound = { previewBound = true }
+            )
+        }
 
         // Overlay based on state
         when (val state = recordingState) {
@@ -156,7 +169,8 @@ fun RecordingScreen(
 @Composable
 private fun CameraPreviewView(
     viewModel: RecordingViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPreviewBound: () -> Unit = {}
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -167,16 +181,17 @@ private fun CameraPreviewView(
         }
     }
 
+    // Bind preview when the composable is first created
+    DisposableEffect(lifecycleOwner) {
+        viewModel.bindCameraPreview(lifecycleOwner, previewView)
+        onPreviewBound()
+        onDispose { }
+    }
+
     AndroidView(
         factory = { previewView },
-        modifier = modifier,
-        update = { view ->
-            // Binding is handled by the camera manager
-        }
+        modifier = modifier
     )
-
-    // Note: In a real implementation, we'd need to call cameraManager.bindPreview here
-    // This requires access to the cameraManager from the viewModel
 }
 
 @Composable

@@ -12,6 +12,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.shutteranalyzer.data.repository.SettingsRepository
 import com.shutteranalyzer.ui.navigation.NavGraph
@@ -19,6 +20,7 @@ import com.shutteranalyzer.ui.navigation.Screen
 import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
 import dagger.hilt.android.AndroidEntryPoint
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
@@ -57,7 +59,8 @@ class MainActivity : ComponentActivity() {
                             navController.addOnDestinationChangedListener { _, dest, _ ->
                                 if (dest.route == Screen.Home.route) {
                                     // Mark onboarding as complete when reaching home
-                                    kotlinx.coroutines.runBlocking {
+                                    // Use lifecycleScope.launch to avoid blocking the UI thread
+                                    lifecycleScope.launch {
                                         settingsRepository.setHasSeenOnboarding(true)
                                     }
                                 }
