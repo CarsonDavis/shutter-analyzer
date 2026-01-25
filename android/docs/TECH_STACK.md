@@ -471,8 +471,8 @@ dependencies {
 
 ## References
 
-- [ANDROID_APP_SPEC.md](ANDROID_APP_SPEC.md) - App requirements and flows
-- [ANDROID_WIREFRAMES.md](ANDROID_WIREFRAMES.md) - Screen mockups
+- [APP_SPEC.md](APP_SPEC.md) - App requirements and flows
+- [WIREFRAMES.md](WIREFRAMES.md) - Screen mockups
 - [Jetpack Compose docs](https://developer.android.com/jetpack/compose)
 - [CameraX docs](https://developer.android.com/training/camerax)
 - [Room docs](https://developer.android.com/training/data-storage/room)

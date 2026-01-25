@@ -472,10 +472,11 @@ The core UX requires detecting shutter events *while recording*:
 
 ## 9. References
 
-- [ANDROID_WIREFRAMES.md](ANDROID_WIREFRAMES.md) - ASCII wireframes for all screens
-- [ANDROID_TECH_STACK.md](ANDROID_TECH_STACK.md) - Technology stack and architecture
-- [REQUIREMENTS.md](../REQUIREMENTS.md) - Original CLI requirements
+- [WIREFRAMES.md](WIREFRAMES.md) - ASCII wireframes for all screens
+- [TECH_STACK.md](TECH_STACK.md) - Technology stack and architecture
+- [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) - Implementation phases and porting guide
+- [REQUIREMENTS.md](../../REQUIREMENTS.md) - Original CLI requirements
 - [THEORY.md](THEORY.md) - Shutter measurement theory
-- [research/google-play-publishing/](research/google-play-publishing/) - Play Store publishing guides
-- [architecture.md](../architecture.md) - CLI tool API documentation (reference for algorithm)
+- [research/google-play-publishing/](../../docs/research/google-play-publishing/) - Play Store publishing guides
+- [architecture.md](../../architecture.md) - CLI tool API documentation (reference for algorithm)
 

@@ -7,12 +7,15 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | Document | Purpose |
 |----------|---------|
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
+| [instructions.md](instructions.md) | Claude Code instructions for working on this repo |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements (CLI tool) |
-| [docs/ANDROID_APP_SPEC.md](docs/ANDROID_APP_SPEC.md) | **Android app specification** - screens, flows, requirements |
-| [docs/ANDROID_WIREFRAMES.md](docs/ANDROID_WIREFRAMES.md) | **Android wireframes** - ASCII mockups for all screens |
-| [docs/ANDROID_TECH_STACK.md](docs/ANDROID_TECH_STACK.md) | **Android tech stack** - Kotlin, Compose, CameraX, Room, etc. |
-| [docs/THEORY.md](docs/THEORY.md) | Theory of shutter speed measurement |
-| [docs/HOW_TO.md](docs/HOW_TO.md) | Step-by-step usage guide |
+| [android/docs/APP_SPEC.md](android/docs/APP_SPEC.md) | **Android app specification** - screens, flows, requirements |
+| [android/docs/WIREFRAMES.md](android/docs/WIREFRAMES.md) | **Android wireframes** - ASCII mockups for all screens |
+| [android/docs/TECH_STACK.md](android/docs/TECH_STACK.md) | **Android tech stack** - Kotlin, Compose, CameraX, Room, etc. |
+| [android/docs/IMPLEMENTATION_PLAN.md](android/docs/IMPLEMENTATION_PLAN.md) | **Android implementation plan** - phases, porting guide, code examples |
+| [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) | **Android implementation log** - progress tracking |
+| [android/docs/THEORY.md](android/docs/THEORY.md) | Theory of shutter speed measurement |
+| [android/docs/HOW_TO.md](android/docs/HOW_TO.md) | Step-by-step usage guide |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
 | [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) | Implementation progress log |
 | [architecture.md](architecture.md) | API documentation and technical details |
@@ -23,7 +26,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 
 ```
 shutter-analyzer/
-├── shutter_analyzer/              # Core Python module
+├── shutter_analyzer/              # Core Python module (CLI tool)
 │   ├── __init__.py                # Package initializer with exports
 │   ├── __main__.py                # Module entry point
 │   ├── video_processor.py         # Video file I/O operations
@@ -32,20 +35,31 @@ shutter-analyzer/
 │   ├── output.py                  # Result formatting and file generation
 │   ├── verify.py                  # Manual verification tool
 │   └── main.py                    # CLI entry point
+├── android/                       # Android app (Kotlin/Compose)
+│   ├── docs/                      # Android documentation
+│   │   ├── APP_SPEC.md            # App specification
+│   │   ├── WIREFRAMES.md          # Screen mockups
+│   │   ├── TECH_STACK.md          # Technology decisions
+│   │   ├── IMPLEMENTATION_PLAN.md # Implementation phases
+│   │   ├── IMPLEMENTATION_LOG.md  # Progress tracking
+│   │   ├── THEORY.md              # Shutter measurement theory
+│   │   └── HOW_TO.md              # Usage guide
+│   └── app/                       # Android app source (see IMPLEMENTATION_PLAN.md)
 ├── videos/                        # Input video files
 │   └── *.mp4                      # Test videos
 ├── outputs/                       # Generated outputs (gitignored except examples/)
 │   ├── examples/                  # Example outputs for reference
 │   └── <video-name>/              # Per-video results
-├── docs/                          # Documentation and research
+├── docs/                          # Documentation (CLI tool)
 │   └── research/                  # Market research and publishing guides
 ├── backup/                        # Extracted frames backup (gitignored)
 ├── test_basic_functionality.py    # Interactive test suite
-├── REQUIREMENTS.md                # Project requirements
-├── IMPLEMENTATION_PLAN.md         # Implementation instructions
+├── REQUIREMENTS.md                # Project requirements (CLI)
+├── IMPLEMENTATION_PLAN.md         # Implementation instructions (CLI)
 ├── IMPLEMENTATION_LOG.md          # Implementation progress log
 ├── architecture.md                # API documentation
 ├── pyproject.toml                 # Python project configuration
+├── instructions.md                # Claude Code instructions
 └── INDEX.md                       # This file
 ```
 
