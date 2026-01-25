@@ -34,6 +34,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -76,7 +78,7 @@ fun HomeScreen(
                     IconButton(onClick = onSettingsClick) {
                         Icon(
                             imageVector = Icons.Default.Settings,
-                            contentDescription = "Settings"
+                            contentDescription = "Open settings"
                         )
                     }
                 },
@@ -123,7 +125,8 @@ private fun CameraList(
             Text(
                 text = "MY CAMERAS",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -193,7 +196,7 @@ private fun BottomButtons(
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
-                contentDescription = null,
+                contentDescription = "Add new test",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -206,7 +209,7 @@ private fun BottomButtons(
         ) {
             Icon(
                 imageVector = Icons.Default.VideoLibrary,
-                contentDescription = null,
+                contentDescription = "Import video",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))

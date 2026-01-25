@@ -1,4 +1,4 @@
-package com.shutteranalyzer.ui.screens.import
+package com.shutteranalyzer.ui.screens.videoimport
 
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,6 +46,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -98,7 +100,7 @@ fun ImportScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Go back"
                         )
                     }
                 }
@@ -173,7 +175,7 @@ private fun FileSelectionStep(
     ) {
         Icon(
             imageVector = Icons.Default.VideoLibrary,
-            contentDescription = null,
+            contentDescription = "Video library",
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.primary
         )
@@ -199,7 +201,7 @@ private fun FileSelectionStep(
         Button(onClick = onSelectFile) {
             Icon(
                 imageVector = Icons.Default.VideoFile,
-                contentDescription = null,
+                contentDescription = "Select video file",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
@@ -231,7 +233,8 @@ private fun VideoSelectedStep(
                 Text(
                     text = "VIDEO INFORMATION",
                     style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.semantics { heading() }
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -349,7 +352,8 @@ private fun SpeedAssignmentStep(
             Text(
                 text = "ASSIGN SHUTTER SPEEDS",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
@@ -480,7 +484,7 @@ private fun ErrorState(
     ) {
         Icon(
             imageVector = Icons.Default.Error,
-            contentDescription = null,
+            contentDescription = "Error occurred",
             modifier = Modifier.size(64.dp),
             tint = MaterialTheme.colorScheme.error
         )

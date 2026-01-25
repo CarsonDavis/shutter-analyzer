@@ -133,10 +133,33 @@ class ShutterCameraManager @Inject constructor(
                 _cameraState.value = CameraState.Ready
                 continuation.resume(true)
             } catch (e: Exception) {
-                _cameraState.value = CameraState.Error("Failed to initialize camera: ${e.message}")
+                val errorMessage = getCameraErrorMessage(e)
+                _cameraState.value = CameraState.Error(errorMessage)
                 continuation.resume(false)
             }
         }, ContextCompat.getMainExecutor(context))
+    }
+
+    /**
+     * Get a user-friendly error message for camera errors.
+     */
+    private fun getCameraErrorMessage(e: Exception): String {
+        val message = e.message?.lowercase() ?: ""
+        return when {
+            message.contains("permission") ->
+                "Camera permission is required. Please grant camera access in settings."
+            message.contains("in use") || message.contains("busy") ->
+                "Camera is being used by another app. Please close other camera apps and try again."
+            message.contains("unavailable") || message.contains("not found") ->
+                "Camera is unavailable. Please check if your device has a camera."
+            message.contains("disconnected") ->
+                "Camera was disconnected. Please try again."
+            message.contains("max cameras") ->
+                "Too many camera sessions open. Please close other camera apps."
+            message.contains("security") ->
+                "Camera access was denied. Please grant permission in settings."
+            else -> "Failed to initialize camera: ${e.message ?: "Unknown error"}"
+        }
     }
 
     /**
@@ -192,7 +215,8 @@ class ShutterCameraManager @Inject constructor(
 
             _cameraState.value = CameraState.Ready
         } catch (e: Exception) {
-            _cameraState.value = CameraState.Error("Failed to bind camera: ${e.message}")
+            val errorMessage = getCameraErrorMessage(e)
+            _cameraState.value = CameraState.Error(errorMessage)
         }
     }
 

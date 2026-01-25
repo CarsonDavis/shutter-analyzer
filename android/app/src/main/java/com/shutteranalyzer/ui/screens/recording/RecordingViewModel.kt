@@ -187,8 +187,17 @@ class RecordingViewModel @Inject constructor(
      */
     fun stopRecording() {
         cameraManager.stopRecording()
-        saveDetectedEvents()
-        _recordingState.value = RecordingState.Complete
+
+        // Check if any events were detected
+        val events = cameraManager.getDetectedEvents()
+        if (events.isEmpty()) {
+            // Still complete, but with zero events - the UI will handle this
+            saveDetectedEvents()
+            _recordingState.value = RecordingState.Complete
+        } else {
+            saveDetectedEvents()
+            _recordingState.value = RecordingState.Complete
+        }
     }
 
     /**

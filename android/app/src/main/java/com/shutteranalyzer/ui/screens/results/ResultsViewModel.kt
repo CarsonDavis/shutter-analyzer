@@ -89,6 +89,12 @@ class ResultsViewModel @Inject constructor(
     val isSaved: StateFlow<Boolean> = _isSaved.asStateFlow()
 
     /**
+     * Loading state.
+     */
+    private val _isLoading = MutableStateFlow(true)
+    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    /**
      * Timeline chart data (brightness values, events, threshold).
      */
     private val _timelineData = MutableStateFlow<TimelineData?>(null)
@@ -100,6 +106,8 @@ class ResultsViewModel @Inject constructor(
 
     private fun loadSessionAndCalculate() {
         viewModelScope.launch {
+            _isLoading.value = true
+
             val loadedSession = testSessionRepository.getSessionById(sessionId)
             _session.value = loadedSession
 
@@ -118,6 +126,8 @@ class ResultsViewModel @Inject constructor(
                 // Build timeline data for brightness chart
                 buildTimelineData(session)
             }
+
+            _isLoading.value = false
         }
     }
 

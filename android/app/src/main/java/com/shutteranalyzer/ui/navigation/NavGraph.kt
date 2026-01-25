@@ -8,7 +8,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
 import com.shutteranalyzer.ui.screens.camera.CameraDetailScreen
 import com.shutteranalyzer.ui.screens.home.HomeScreen
-import com.shutteranalyzer.ui.screens.import.ImportScreen
+import com.shutteranalyzer.ui.screens.videoimport.ImportScreen
 import com.shutteranalyzer.ui.screens.onboarding.OnboardingScreen
 import com.shutteranalyzer.ui.screens.recording.RecordingScreen
 import com.shutteranalyzer.ui.screens.results.ResultsScreen

@@ -39,6 +39,8 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -112,7 +114,7 @@ fun CameraDetailScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Go back"
                         )
                     }
                 }
@@ -209,7 +211,7 @@ private fun CameraHeader(
         IconButton(onClick = onEditName) {
             Icon(
                 imageVector = Icons.Default.Edit,
-                contentDescription = "Edit name"
+                contentDescription = "Edit camera name"
             )
         }
     }
@@ -230,7 +232,8 @@ private fun SessionList(
             Text(
                 text = "TEST HISTORY",
                 style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(8.dp))
         }
@@ -341,7 +344,7 @@ private fun BottomActions(
         ) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = null,
+                contentDescription = "Delete camera",
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))

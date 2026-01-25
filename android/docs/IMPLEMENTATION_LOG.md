@@ -1033,7 +1033,122 @@ ui/components/
 - Shows detection in context, not just isolated events
 
 ### Next Steps
-- Phase 7: Polish & Testing
+- ~~Phase 7: Polish & Testing~~ ✅ Complete (see below)
+- Phase 8: Publishing
+
+---
+
+## 2025-01-25 - Phase 7: Polish & Testing
+
+### Overview
+Made the app production-ready with proper error handling, accessibility improvements, and UX polish.
+
+### Changes Made
+
+#### Permission Handling (CRITICAL)
+- `ui/screens/setup/RecordingSetupScreen.kt`
+  - Added permission denied dialog with explanation
+  - Added permission rationale dialog (shown before first request if rationale applies)
+  - Added open settings dialog for permanently denied permissions
+  - Uses `ActivityCompat.shouldShowRequestPermissionRationale()` to detect denial type
+  - Provides "Open Settings" button for users to manually enable camera access
+
+#### Accessibility Improvements
+- Added `contentDescription` to all actionable icons across screens:
+  - HomeScreen: Settings, Add, Import icons
+  - RecordingSetupScreen: Back, Info, Expand icons
+  - RecordingScreen: Redo, Skip, Done, Check icons
+  - ResultsScreen: Back, Save, Refresh icons
+  - CameraDetailScreen: Back, Edit, Delete, History icons
+  - ImportScreen: Back, VideoLibrary, VideoFile, Error icons
+- Added `Modifier.semantics { heading() }` to all section titles for screen readers
+- Section headings updated: "MY CAMERAS", "SHUTTER SPEEDS TO TEST", "ACCURACY TABLE", "DEVIATION BY SPEED", etc.
+
+#### Error Handling Improvements
+- `data/camera/ShutterCameraManager.kt`
+  - Added `getCameraErrorMessage()` helper for user-friendly error messages
+  - Distinguishes camera errors: "in use", "unavailable", "permission denied", "disconnected", "max cameras"
+  - Applied to both `initialize()` and `bindPreview()` error paths
+
+- `ui/screens/recording/RecordingViewModel.kt`
+  - Added zero events handling in `stopRecording()`
+  - Recording completes even with zero events (UI handles empty state)
+
+#### Loading States
+- `ui/screens/results/ResultsViewModel.kt`
+  - Added `isLoading: StateFlow<Boolean>` for loading state tracking
+  - Set loading true at start of `loadSessionAndCalculate()`
+  - Set loading false after all data loaded
+
+- `ui/screens/results/ResultsScreen.kt`
+  - Added loading state with `CircularProgressIndicator` and "Loading results..." text
+  - Shows centered loading spinner while session data loads
+
+#### Empty States
+- `ui/screens/results/ResultsScreen.kt`
+  - Added `NoEventsDetectedState` composable for zero events scenario
+  - Shows informative message with possible causes:
+    - Lighting too dim
+    - Phone not positioned correctly
+    - Shutter not fired during recording
+  - Suggests trying again with brighter lighting
+
+#### Package Name Fix
+- Renamed `ui/screens/import/` to `ui/screens/videoimport/`
+- "import" is a Kotlin reserved keyword that caused Hilt/KSP code generation issues
+- Updated all references in `NavGraph.kt`
+
+#### Build Dependencies
+- Added `androidx.compose.material:material-icons-extended` for extended Material icons
+- Created app launcher icons (adaptive icons for Android 8.0+):
+  - `res/drawable/ic_launcher_background.xml` - blue background
+  - `res/drawable/ic_launcher_foreground.xml` - camera lens icon
+  - `res/mipmap-anydpi-v26/ic_launcher.xml` and `ic_launcher_round.xml`
+
+#### Static Method Fixes
+- `analysis/ShutterSpeedCalculator.kt`
+  - Added `formatShutterSpeed()` to companion object for static access
+
+- `data/video/VideoAnalyzer.kt`
+  - Injected `ThresholdCalculator` and `EventDetector` via constructor
+  - Changed from static calls to instance method calls
+  - Uses `analyzeBrightnessDistribution()` and `findShutterEvents()` + `createShutterEvents()`
+
+#### Documentation
+- Created `docs/BUILD.md` - comprehensive guide for building locally
+  - Prerequisites (Android Studio, SDK)
+  - Android Studio build instructions
+  - Command-line build instructions with JAVA_HOME setup
+  - Troubleshooting section
+- Updated `INDEX.md` to link to BUILD.md
+
+### Files Modified Summary
+
+| File | Change Type |
+|------|-------------|
+| `RecordingSetupScreen.kt` | Permission denied UI, accessibility |
+| `HomeScreen.kt` | Icon accessibility, semantic headings |
+| `RecordingScreen.kt` | Icon accessibility |
+| `ResultsScreen.kt` | Loading state, empty state, icon accessibility, headings |
+| `ResultsViewModel.kt` | Loading state flow |
+| `CameraDetailScreen.kt` | Icon accessibility, semantic headings |
+| `ImportScreen.kt` | Icon accessibility, semantic headings, package rename |
+| `ImportViewModel.kt` | Package rename |
+| `NavGraph.kt` | Import path update |
+| `ShutterCameraManager.kt` | Better error messages |
+| `RecordingViewModel.kt` | Zero events handling |
+| `ShutterSpeedCalculator.kt` | Static formatShutterSpeed |
+| `VideoAnalyzer.kt` | Injected dependencies, correct method calls |
+| `app/build.gradle.kts` | Added material-icons-extended |
+| `res/drawable/` | Launcher icon resources |
+| `res/mipmap-anydpi-v26/` | Adaptive icon definitions |
+| `docs/BUILD.md` | NEW - Build guide |
+
+### Build Status
+- Build: ✅ Successful
+- Warnings: 4 deprecation warnings (LocalLifecycleOwner, menuAnchor, statusBarColor) - non-blocking
+
+### Next Steps
 - Phase 8: Publishing
 
 ---

@@ -1,6 +1,9 @@
 package com.shutteranalyzer.ui.screens.setup
 
 import android.Manifest
+import android.content.Intent
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
@@ -20,9 +23,11 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.ExpandLess
 import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Info
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -47,10 +52,15 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.app.ActivityCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
@@ -80,6 +90,12 @@ fun RecordingSetupScreen(
 
     val scope = rememberCoroutineScope()
     val sheetState = rememberModalBottomSheetState()
+    val context = LocalContext.current
+
+    // Permission state
+    var showPermissionDeniedDialog by remember { mutableStateOf(false) }
+    var showPermissionRationaleDialog by remember { mutableStateOf(false) }
+    var showOpenSettingsDialog by remember { mutableStateOf(false) }
 
     // Camera permission launcher
     val cameraPermissionLauncher = rememberLauncherForActivityResult(
@@ -90,7 +106,71 @@ fun RecordingSetupScreen(
                 val sessionId = viewModel.createSession()
                 onStartRecording(sessionId)
             }
+        } else {
+            // Check if we should show rationale or if permanently denied
+            val activity = context as? android.app.Activity
+            if (activity != null && !ActivityCompat.shouldShowRequestPermissionRationale(
+                    activity,
+                    Manifest.permission.CAMERA
+                )
+            ) {
+                // Permission permanently denied - show settings dialog
+                showOpenSettingsDialog = true
+            } else {
+                // Permission denied but can ask again
+                showPermissionDeniedDialog = true
+            }
         }
+    }
+
+    // Handle permission request with rationale check
+    fun requestCameraPermission() {
+        val activity = context as? android.app.Activity
+        if (activity != null && ActivityCompat.shouldShowRequestPermissionRationale(
+                activity,
+                Manifest.permission.CAMERA
+            )
+        ) {
+            showPermissionRationaleDialog = true
+        } else {
+            cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    // Permission denied dialog - can request again
+    if (showPermissionDeniedDialog) {
+        PermissionDeniedDialog(
+            onDismiss = { showPermissionDeniedDialog = false },
+            onRequestAgain = {
+                showPermissionDeniedDialog = false
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        )
+    }
+
+    // Permission rationale dialog
+    if (showPermissionRationaleDialog) {
+        PermissionRationaleDialog(
+            onDismiss = { showPermissionRationaleDialog = false },
+            onContinue = {
+                showPermissionRationaleDialog = false
+                cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
+            }
+        )
+    }
+
+    // Settings dialog - permission permanently denied
+    if (showOpenSettingsDialog) {
+        OpenSettingsDialog(
+            onDismiss = { showOpenSettingsDialog = false },
+            onOpenSettings = {
+                showOpenSettingsDialog = false
+                val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                    data = Uri.fromParts("package", context.packageName, null)
+                }
+                context.startActivity(intent)
+            }
+        )
     }
 
     Scaffold(
@@ -101,7 +181,7 @@ fun RecordingSetupScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Go back"
                         )
                     }
                 }
@@ -119,7 +199,8 @@ fun RecordingSetupScreen(
             Text(
                 text = "CAMERA NAME (optional)",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(8.dp))
             OutlinedTextField(
@@ -141,7 +222,8 @@ fun RecordingSetupScreen(
             Text(
                 text = "SHUTTER SPEEDS TO TEST",
                 style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.semantics { heading() }
             )
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -188,7 +270,7 @@ fun RecordingSetupScreen(
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.Info,
-                                contentDescription = null,
+                                contentDescription = "Setup information",
                                 tint = MaterialTheme.colorScheme.primary
                             )
                             Text(
@@ -231,9 +313,7 @@ fun RecordingSetupScreen(
 
             // Start recording button
             Button(
-                onClick = {
-                    cameraPermissionLauncher.launch(Manifest.permission.CAMERA)
-                },
+                onClick = { requestCameraPermission() },
                 modifier = Modifier.fillMaxWidth(),
                 enabled = selectedSpeeds.isNotEmpty()
             ) {
@@ -392,6 +472,129 @@ private fun SpeedCheckbox(
             modifier = Modifier.padding(start = 4.dp)
         )
     }
+}
+
+/**
+ * Dialog shown when camera permission is denied but can be requested again.
+ */
+@Composable
+private fun PermissionDeniedDialog(
+    onDismiss: () -> Unit,
+    onRequestAgain: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text("Camera Permission Required")
+        },
+        text = {
+            Text(
+                "Shutter Analyzer needs camera access to record and analyze your camera's shutter. " +
+                        "Without this permission, you won't be able to perform shutter speed tests.",
+                textAlign = TextAlign.Center
+            )
+        },
+        confirmButton = {
+            Button(onClick = onRequestAgain) {
+                Text("Try Again")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog explaining why camera permission is needed (shown before first request if rationale applies).
+ */
+@Composable
+private fun PermissionRationaleDialog(
+    onDismiss: () -> Unit,
+    onContinue: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary
+            )
+        },
+        title = {
+            Text("Why Camera Access?")
+        },
+        text = {
+            Text(
+                "Shutter Analyzer uses your phone's camera to record high-speed video of your " +
+                        "camera's shutter opening and closing. This allows us to measure the actual " +
+                        "shutter speed with high precision.\n\n" +
+                        "The video is processed on your device and is not sent anywhere.",
+                textAlign = TextAlign.Start
+            )
+        },
+        confirmButton = {
+            Button(onClick = onContinue) {
+                Text("Continue")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
+}
+
+/**
+ * Dialog shown when permission is permanently denied, directing user to settings.
+ */
+@Composable
+private fun OpenSettingsDialog(
+    onDismiss: () -> Unit,
+    onOpenSettings: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.CameraAlt,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.error
+            )
+        },
+        title = {
+            Text("Permission Required")
+        },
+        text = {
+            Text(
+                "Camera permission has been permanently denied. To use Shutter Analyzer, " +
+                        "please enable camera access in your device settings.\n\n" +
+                        "Go to Settings → Permissions → Camera → Allow",
+                textAlign = TextAlign.Start
+            )
+        },
+        confirmButton = {
+            Button(onClick = onOpenSettings) {
+                Text("Open Settings")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("Cancel")
+            }
+        }
+    )
 }
 
 @Preview(showBackground = true)

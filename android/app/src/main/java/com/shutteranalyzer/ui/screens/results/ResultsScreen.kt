@@ -10,17 +10,20 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -40,6 +43,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.heading
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -88,6 +93,7 @@ fun ResultsScreen(
     val testDate by viewModel.testDate.collectAsStateWithLifecycle()
     val isSaved by viewModel.isSaved.collectAsStateWithLifecycle()
     val timelineData by viewModel.timelineData.collectAsStateWithLifecycle()
+    val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableIntStateOf(ResultsTabs.SUMMARY) }
 
@@ -99,13 +105,58 @@ fun ResultsScreen(
                     IconButton(onClick = onBackClick) {
                         Icon(
                             imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back"
+                            contentDescription = "Go back"
                         )
                     }
                 }
             )
         }
     ) { paddingValues ->
+        // Loading state
+        if (isLoading) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Loading results...",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+            return@Scaffold
+        }
+
+        // Empty state - no events detected
+        if (results.isEmpty()) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                NoEventsDetectedState(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                )
+
+                // Bottom buttons
+                BottomButtons(
+                    isSaved = true, // Don't allow save when empty
+                    onSave = {},
+                    onTestAgain = onTestAgain,
+                    modifier = Modifier.padding(16.dp)
+                )
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -176,7 +227,8 @@ fun ResultsScreen(
                                 text = "ACCURACY TABLE",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
                         item {
@@ -197,7 +249,8 @@ fun ResultsScreen(
                                 text = "DEVIATION BY SPEED",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
                         item {
@@ -221,7 +274,8 @@ fun ResultsScreen(
                                 text = "EXPECTED VS MEASURED",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
                         item {
@@ -245,7 +299,8 @@ fun ResultsScreen(
                                 text = "BRIGHTNESS TIMELINE",
                                 style = MaterialTheme.typography.titleSmall,
                                 color = MaterialTheme.colorScheme.primary,
-                                fontWeight = FontWeight.Medium
+                                fontWeight = FontWeight.Medium,
+                                modifier = Modifier.semantics { heading() }
                             )
                         }
                         item {
@@ -422,7 +477,7 @@ private fun BottomButtons(
             modifier = Modifier.weight(1f),
             enabled = !isSaved
         ) {
-            Icon(Icons.Default.Save, contentDescription = null)
+            Icon(Icons.Default.Save, contentDescription = "Save results")
             Spacer(modifier = Modifier.width(8.dp))
             Text(if (isSaved) "SAVED" else "SAVE")
         }
@@ -431,9 +486,56 @@ private fun BottomButtons(
             onClick = onTestAgain,
             modifier = Modifier.weight(1f)
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = null)
+            Icon(Icons.Default.Refresh, contentDescription = "Run another test")
             Spacer(modifier = Modifier.width(8.dp))
             Text("TEST AGAIN")
+        }
+    }
+}
+
+/**
+ * Empty state shown when no shutter events were detected.
+ */
+@Composable
+private fun NoEventsDetectedState(
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier,
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier.padding(32.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                modifier = Modifier.size(64.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+            )
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Text(
+                text = "No Shutter Events Detected",
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = "The recording didn't capture any shutter activations. " +
+                        "This could happen if:\n\n" +
+                        "• The lighting was too dim\n" +
+                        "• The phone wasn't positioned correctly\n" +
+                        "• The shutter wasn't fired during recording\n\n" +
+                        "Try again with brighter lighting and make sure the phone can see through the camera's lens opening.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                textAlign = TextAlign.Center
+            )
         }
     }
 }

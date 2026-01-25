@@ -34,6 +34,20 @@ class ShutterSpeedCalculator @Inject constructor() {
             val duration = durationFrames / fps
             return 1.0 / duration
         }
+
+        /**
+         * Format shutter speed as a human-readable string.
+         *
+         * @param speed Shutter speed as 1/x value
+         * @return Formatted string like "1/500" or "1/60"
+         */
+        fun formatShutterSpeed(speed: Double): String {
+            return if (speed >= 1.0) {
+                "1/${speed.toInt()}"
+            } else {
+                "${"%.2f".format(1.0 / speed)}s"
+            }
+        }
     }
 
     /**

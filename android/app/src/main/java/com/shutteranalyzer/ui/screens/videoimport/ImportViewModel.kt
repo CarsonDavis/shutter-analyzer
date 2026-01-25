@@ -1,4 +1,4 @@
-package com.shutteranalyzer.ui.screens.import
+package com.shutteranalyzer.ui.screens.videoimport
 
 import android.net.Uri
 import androidx.lifecycle.ViewModel

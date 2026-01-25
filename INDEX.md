@@ -14,6 +14,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | [android/docs/TECH_STACK.md](android/docs/TECH_STACK.md) | **Android tech stack** - Kotlin, Compose, CameraX, Room, etc. |
 | [android/docs/IMPLEMENTATION_PLAN.md](android/docs/IMPLEMENTATION_PLAN.md) | **Android implementation plan** - phases, porting guide, code examples |
 | [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) | **Android implementation log** - progress tracking |
+| [android/docs/BUILD.md](android/docs/BUILD.md) | **Android build guide** - how to build and run locally |
 | [android/docs/THEORY.md](android/docs/THEORY.md) | Theory of shutter speed measurement |
 | [android/docs/HOW_TO.md](android/docs/HOW_TO.md) | Step-by-step usage guide |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
@@ -45,6 +46,7 @@ shutter-analyzer/
 │   │   ├── TECH_STACK.md          # Technology decisions
 │   │   ├── IMPLEMENTATION_PLAN.md # Implementation phases
 │   │   ├── IMPLEMENTATION_LOG.md  # Progress tracking
+│   │   ├── BUILD.md               # Build and run locally guide
 │   │   ├── THEORY.md              # Shutter measurement theory
 │   │   └── HOW_TO.md              # Usage guide
 │   └── app/
@@ -65,11 +67,11 @@ shutter-analyzer/
 │           │   │   └── camera/                # CameraX + live detection (Phase 3)
 │           │   ├── domain/model/              # Domain models (Phase 2)
 │           │   ├── di/                        # Hilt DI modules
-│           │   └── ui/                        # UI layer (Phase 4, 5, 6)
+│           │   └── ui/                        # UI layer (Phase 4, 5, 6, 7)
 │           │       ├── navigation/            # NavGraph
 │           │       ├── theme/                 # Color, Type, Theme
 │           │       ├── components/            # Reusable UI components + Charts (Phase 6)
-│           │       └── screens/               # All app screens
+│           │       └── screens/               # All app screens (videoimport, not import)
 │           └── test/java/com/shutteranalyzer/  # Unit tests
 ├── videos/                        # Input video files
 │   └── *.mp4                      # Test videos
@@ -351,5 +353,5 @@ See [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) for
 | Phase 4.5 | Analysis Pipeline Integration Fix | ✅ Complete |
 | Phase 5 | Secondary Screens (Settings, Camera Detail, Onboarding, Import) | ✅ Complete |
 | Phase 6 | Visualization & Charts | ✅ Complete |
-| Phase 7 | Polish & Testing | ⏳ Pending |
+| Phase 7 | Polish & Testing | ✅ Complete |
 | Phase 8 | Publishing | ⏳ Pending |

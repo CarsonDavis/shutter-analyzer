@@ -46,7 +46,9 @@ typealias ProgressCallback = (Float) -> Unit
  */
 @Singleton
 class VideoAnalyzer @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val thresholdCalculator: ThresholdCalculator,
+    private val eventDetector: EventDetector
 ) {
 
     /**
@@ -153,13 +155,18 @@ class VideoAnalyzer @Inject constructor(
             }
 
             // Calculate brightness statistics
-            val brightnessStats = ThresholdCalculator.calculateStats(brightnessValues)
+            val brightnessStats = thresholdCalculator.analyzeBrightnessDistribution(brightnessValues)
 
             // Detect events using the same algorithm as live detection
-            val events = EventDetector.findEvents(
+            val rawEvents = eventDetector.findShutterEvents(
                 brightnessValues = brightnessValues,
-                threshold = brightnessStats.threshold,
-                baseline = brightnessStats.baseline,
+                threshold = brightnessStats.threshold
+            )
+
+            // Convert raw events to ShutterEvents
+            val events = eventDetector.createShutterEvents(
+                rawEvents = rawEvents,
+                baselineBrightness = brightnessStats.baseline,
                 peakBrightness = brightnessStats.peakBrightness
             )
 

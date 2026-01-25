@@ -344,7 +344,7 @@ private fun WaitingForShutterOverlay(
                 onClick = onRedo,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = null)
+                Icon(Icons.Default.Refresh, contentDescription = "Redo last measurement")
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Redo")
             }
@@ -353,13 +353,13 @@ private fun WaitingForShutterOverlay(
                 onClick = onSkip,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
             ) {
-                Icon(Icons.Default.SkipNext, contentDescription = null)
+                Icon(Icons.Default.SkipNext, contentDescription = "Skip this speed")
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Skip")
             }
 
             Button(onClick = onDone) {
-                Icon(Icons.Default.Stop, contentDescription = null)
+                Icon(Icons.Default.Stop, contentDescription = "Finish recording")
                 Spacer(modifier = Modifier.width(4.dp))
                 Text("Done")
             }
@@ -424,7 +424,7 @@ private fun EventDetectedOverlay(
                 ) {
                     Icon(
                         imageVector = Icons.Default.Check,
-                        contentDescription = "Detected",
+                        contentDescription = "Shutter event detected successfully",
                         tint = AccuracyGreen,
                         modifier = Modifier.size(32.dp)
                     )
