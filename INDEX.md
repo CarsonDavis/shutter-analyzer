@@ -65,11 +65,11 @@ shutter-analyzer/
 │           │   │   └── camera/                # CameraX + live detection (Phase 3)
 │           │   ├── domain/model/              # Domain models (Phase 2)
 │           │   ├── di/                        # Hilt DI modules
-│           │   └── ui/                        # UI layer (Phase 4)
+│           │   └── ui/                        # UI layer (Phase 4, 5, 6)
 │           │       ├── navigation/            # NavGraph
 │           │       ├── theme/                 # Color, Type, Theme
-│           │       ├── components/            # AccuracyIndicator, CameraCard, SpeedChip, BrightnessIndicator
-│           │       └── screens/               # home/, setup/, recording/, review/, results/
+│           │       ├── components/            # Reusable UI components + Charts (Phase 6)
+│           │       └── screens/               # All app screens
 │           └── test/java/com/shutteranalyzer/  # Unit tests
 ├── videos/                        # Input video files
 │   └── *.mp4                      # Test videos
@@ -350,5 +350,6 @@ See [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) for
 | Phase 4 | UI Screens | ✅ Complete |
 | Phase 4.5 | Analysis Pipeline Integration Fix | ✅ Complete |
 | Phase 5 | Secondary Screens (Settings, Camera Detail, Onboarding, Import) | ✅ Complete |
-| Phase 6 | Polish & Testing | ⏳ Pending |
-| Phase 7 | Publishing | ⏳ Pending |
+| Phase 6 | Visualization & Charts | ✅ Complete |
+| Phase 7 | Polish & Testing | ⏳ Pending |
+| Phase 8 | Publishing | ⏳ Pending |

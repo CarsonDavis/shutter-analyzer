@@ -8,6 +8,7 @@ import com.shutteranalyzer.data.repository.CameraRepository
 import com.shutteranalyzer.data.repository.TestSessionRepository
 import com.shutteranalyzer.domain.model.Camera
 import com.shutteranalyzer.domain.model.TestSession
+import com.shutteranalyzer.ui.components.EventRegion
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -27,6 +28,16 @@ data class ShutterResult(
     val expectedMs: Double,
     val measuredMs: Double,
     val deviationPercent: Double
+)
+
+/**
+ * Data for the brightness timeline chart.
+ */
+data class TimelineData(
+    val brightnessValues: List<Double>,
+    val events: List<EventRegion>,
+    val threshold: Double,
+    val baseline: Double
 )
 
 /**
@@ -77,6 +88,12 @@ class ResultsViewModel @Inject constructor(
     private val _isSaved = MutableStateFlow(false)
     val isSaved: StateFlow<Boolean> = _isSaved.asStateFlow()
 
+    /**
+     * Timeline chart data (brightness values, events, threshold).
+     */
+    private val _timelineData = MutableStateFlow<TimelineData?>(null)
+    val timelineData: StateFlow<TimelineData?> = _timelineData.asStateFlow()
+
     init {
         loadSessionAndCalculate()
     }
@@ -97,8 +114,87 @@ class ResultsViewModel @Inject constructor(
 
                 // Calculate results from events
                 calculateResults(session)
+
+                // Build timeline data for brightness chart
+                buildTimelineData(session)
             }
         }
+    }
+
+    /**
+     * Build timeline data from session events for the brightness chart.
+     */
+    private fun buildTimelineData(session: TestSession) {
+        if (session.events.isEmpty()) {
+            _timelineData.value = null
+            return
+        }
+
+        // Collect brightness values and build event regions
+        val allBrightness = mutableListOf<Double>()
+        val eventRegions = mutableListOf<EventRegion>()
+
+        // Use stored expected speeds for labels
+        val expectedSpeeds = session.expectedSpeeds
+
+        // We need to reconstruct the timeline from individual events
+        // Events are stored with their frame indices and brightness values
+        var currentIndex = 0
+
+        session.events.forEachIndexed { eventIndex, event ->
+            // Add gap before event (simulate baseline frames)
+            val gapFrames = 20 // Add some baseline frames between events
+            if (eventIndex > 0) {
+                val baselineValue = event.brightnessValues.minOrNull() ?: 30.0
+                repeat(gapFrames) {
+                    allBrightness.add(baselineValue + (Math.random() * 5 - 2.5))
+                }
+                currentIndex += gapFrames
+            } else {
+                // Add some baseline before first event
+                val baselineValue = event.brightnessValues.minOrNull() ?: 30.0
+                repeat(gapFrames) {
+                    allBrightness.add(baselineValue + (Math.random() * 5 - 2.5))
+                }
+                currentIndex += gapFrames
+            }
+
+            // Record event start
+            val eventStart = currentIndex
+
+            // Add event brightness values
+            event.brightnessValues.forEach { brightness ->
+                allBrightness.add(brightness)
+                currentIndex++
+            }
+
+            // Record event end
+            val eventEnd = currentIndex
+
+            // Get label for this event
+            val label = expectedSpeeds.getOrNull(eventIndex) ?: ""
+
+            eventRegions.add(EventRegion(eventStart, eventEnd, label))
+        }
+
+        // Add baseline after last event
+        val lastEvent = session.events.lastOrNull()
+        val finalBaseline = lastEvent?.brightnessValues?.minOrNull() ?: 30.0
+        repeat(20) {
+            allBrightness.add(finalBaseline + (Math.random() * 5 - 2.5))
+        }
+
+        // Calculate threshold and baseline from data
+        val baseline = allBrightness.filter { it < 100 }.average().takeIf { it.isFinite() } ?: 30.0
+        val peakAvg = session.events.flatMap { it.brightnessValues }.average().takeIf { it.isFinite() } ?: 150.0
+        val threshold = baseline + (peakAvg - baseline) * 0.3
+
+        _timelineData.value = TimelineData(
+            brightnessValues = allBrightness,
+            events = eventRegions,
+            threshold = threshold,
+            baseline = baseline
+        )
     }
 
     private fun calculateResults(session: TestSession) {

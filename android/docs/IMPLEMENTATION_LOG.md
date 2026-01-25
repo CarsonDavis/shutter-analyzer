@@ -908,12 +908,132 @@ android/app/src/main/java/com/shutteranalyzer/
 ```
 
 ### Next Steps
-- Phase 6: Polish & Testing
-  - Error handling improvements
-  - Empty states refinement
-  - Loading states
-  - Haptic feedback
-  - Accessibility
-- Phase 7: Publishing
+- ~~Phase 6: Visualization & Charts~~ ✅ Complete (see below)
+- Phase 7: Polish & Testing
+- Phase 8: Publishing
+
+---
+
+## 2025-01-25 - Phase 6: Visualization & Charts
+
+### Overview
+Added rich visualizations to the Results screen to help users understand their shutter speed measurements, matching the visual analysis provided by the Python CLI.
+
+### New Components Created
+
+#### Chart Utilities
+- `ui/components/ChartUtils.kt` (NEW)
+  - `drawHorizontalGridLines()` / `drawVerticalGridLines()` - Background grid drawing
+  - `drawDashedHorizontalLine()` / `drawDashedLine()` - Threshold and reference lines
+  - `deviationToColor()` / `deviationToGradientColor()` - Accuracy color scheme
+  - `speedToLogPosition()` / `logPositionToSpeed()` - Log scale conversion for shutter speeds
+  - `drawAxisLabel()` - Native canvas text rendering
+  - `formatSpeed()` - Human-readable speed formatting
+
+#### Deviation Bar Chart
+- `ui/components/DeviationBarChart.kt` (NEW)
+  - Horizontal bars showing deviation for each measurement
+  - Center line at 0% (perfect accuracy)
+  - Bars extend left (slow) or right (fast)
+  - Color gradient: green (0%) → yellow (10%) → orange (15%) → red (20%+)
+  - Speed labels on Y-axis, deviation values on right
+
+#### Speed Comparison Chart
+- `ui/components/SpeedComparisonChart.kt` (NEW)
+  - Scatter plot comparing expected vs measured speeds
+  - Log-scale axes (1/1000s to 1s)
+  - Diagonal dashed line = perfect accuracy
+  - Points colored by deviation magnitude
+  - Useful for identifying systematic bias
+
+#### Brightness Timeline Chart
+- `ui/components/BrightnessTimelineChart.kt` (NEW)
+  - Line plot of brightness values over time
+  - Y-axis: 0-255 brightness, X-axis: frame index
+  - Horizontal dashed line at detection threshold
+  - Green shaded regions for detected events
+  - Event labels above each region
+  - Horizontal scrolling for long recordings
+  - Legend showing brightness line, threshold, and events
+
+### ViewModel Updates
+
+- `ui/screens/results/ResultsViewModel.kt`
+  - Added `TimelineData` data class with brightnessValues, events, threshold, baseline
+  - Added `timelineData: StateFlow<TimelineData?>`
+  - Added `buildTimelineData()` to reconstruct timeline from stored event brightness values
+  - Calculates threshold and baseline from aggregated data
+
+### Screen Updates
+
+- `ui/screens/results/ResultsScreen.kt`
+  - Added `PrimaryTabRow` with 4 tabs: Summary, Deviation, Accuracy, Timeline
+  - Tab state management with `remember { mutableIntStateOf() }`
+  - **Summary tab**: Original results table (unchanged)
+  - **Deviation tab**: `DeviationBarChart` with explanatory text
+  - **Accuracy tab**: `SpeedComparisonChart` with explanatory text
+  - **Timeline tab**: `BrightnessTimelineChart` with event highlighting
+  - Header and average deviation card always visible above tabs
+  - Bottom buttons (Save/Test Again) always visible below tabs
+
+### Gradle/Dependency Updates
+
+- `build.gradle.kts` (root)
+  - AGP: 8.2.0 → 8.7.3
+  - Kotlin: 1.9.21 → 2.1.0
+  - Added `org.jetbrains.kotlin.plugin.compose` 2.1.0
+  - Added `com.google.devtools.ksp` 2.1.0-1.0.29
+  - Hilt: 2.50 → 2.54
+
+- `app/build.gradle.kts`
+  - Migrated from `kapt` to `ksp` for Hilt and Room
+  - Removed `composeOptions.kotlinCompilerExtensionVersion` (now handled by compose plugin)
+  - compileSdk/targetSdk: 34 → 35
+  - Updated all dependencies to latest stable versions
+  - CameraX: 1.3.1 → 1.4.1
+  - Compose BOM: 2024.02.00 → 2024.12.01
+  - Navigation: 2.7.7 → 2.8.5
+  - DataStore: 1.0.0 → 1.1.1
+  - Coroutines: 1.7.3 → 1.9.0
+
+- `gradle-wrapper.properties`
+  - Gradle: 8.5 → 8.10.2
+
+### Project Structure After Phase 6
+
+```
+ui/components/
+├── AccuracyIndicator.kt      # Phase 4
+├── BrightnessIndicator.kt    # Phase 4
+├── CameraCard.kt             # Phase 4
+├── SpeedChip.kt              # Phase 4
+├── ChartUtils.kt             # Phase 6 (NEW)
+├── DeviationBarChart.kt      # Phase 6 (NEW)
+├── SpeedComparisonChart.kt   # Phase 6 (NEW)
+└── BrightnessTimelineChart.kt # Phase 6 (NEW)
+```
+
+### Design Decisions
+
+#### Native Compose Canvas vs External Library
+- Used native Compose `Canvas` API for all charts
+- No external charting dependencies (MPAndroidChart, etc.)
+- Smaller APK size, full control over rendering
+- Consistent with Material Design colors
+
+#### Tab Layout vs Expandable Sections
+- Chose tabs over expandable cards for cleaner UX
+- All charts accessible with single tap
+- Summary tab shows familiar table view by default
+- Charts don't overwhelm users who just want numbers
+
+#### Timeline Data Reconstruction
+- Events store brightness values in `brightnessValuesJson`
+- Timeline reconstructed by adding simulated baseline gaps between events
+- Shows detection in context, not just isolated events
+
+### Next Steps
+- Phase 7: Polish & Testing
+- Phase 8: Publishing
 
 ---

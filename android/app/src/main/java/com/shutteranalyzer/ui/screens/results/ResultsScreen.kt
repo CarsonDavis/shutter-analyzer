@@ -27,11 +27,16 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -42,6 +47,10 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.shutteranalyzer.ui.components.AccuracyIndicator
+import com.shutteranalyzer.ui.components.BrightnessTimelineChart
+import com.shutteranalyzer.ui.components.DeviationBarChart
+import com.shutteranalyzer.ui.components.EventRegion
+import com.shutteranalyzer.ui.components.SpeedComparisonChart
 import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
 import com.shutteranalyzer.ui.theme.getAccuracyColor
 import kotlin.math.abs
@@ -54,6 +63,16 @@ import kotlin.math.abs
  * @param onTestAgain Callback when test again is clicked
  * @param viewModel The ViewModel for this screen
  */
+/**
+ * Tab indices for the results screen.
+ */
+private object ResultsTabs {
+    const val SUMMARY = 0
+    const val DEVIATION = 1
+    const val COMPARISON = 2
+    const val TIMELINE = 3
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ResultsScreen(
@@ -68,6 +87,9 @@ fun ResultsScreen(
     val averageDeviation by viewModel.averageDeviation.collectAsStateWithLifecycle()
     val testDate by viewModel.testDate.collectAsStateWithLifecycle()
     val isSaved by viewModel.isSaved.collectAsStateWithLifecycle()
+    val timelineData by viewModel.timelineData.collectAsStateWithLifecycle()
+
+    var selectedTab by remember { mutableIntStateOf(ResultsTabs.SUMMARY) }
 
     Scaffold(
         topBar = {
@@ -84,77 +106,195 @@ fun ResultsScreen(
             )
         }
     ) { paddingValues ->
-        LazyColumn(
+        Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Header
-            item {
-                Column {
-                    Text(
-                        text = camera?.name ?: "Quick Test",
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Tested: $testDate",
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+            // Header section (always visible)
+            Column(
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            ) {
+                Text(
+                    text = camera?.name ?: "Quick Test",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    text = "Tested: $testDate",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+
+            // Average deviation card (always visible)
+            AverageDeviationCard(
+                averageDeviation = averageDeviation,
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+            )
+
+            // Tab row
+            PrimaryTabRow(
+                selectedTabIndex = selectedTab,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Tab(
+                    selected = selectedTab == ResultsTabs.SUMMARY,
+                    onClick = { selectedTab = ResultsTabs.SUMMARY },
+                    text = { Text("Summary") }
+                )
+                Tab(
+                    selected = selectedTab == ResultsTabs.DEVIATION,
+                    onClick = { selectedTab = ResultsTabs.DEVIATION },
+                    text = { Text("Deviation") }
+                )
+                Tab(
+                    selected = selectedTab == ResultsTabs.COMPARISON,
+                    onClick = { selectedTab = ResultsTabs.COMPARISON },
+                    text = { Text("Accuracy") }
+                )
+                Tab(
+                    selected = selectedTab == ResultsTabs.TIMELINE,
+                    onClick = { selectedTab = ResultsTabs.TIMELINE },
+                    text = { Text("Timeline") }
+                )
+            }
+
+            // Tab content
+            LazyColumn(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                when (selectedTab) {
+                    ResultsTabs.SUMMARY -> {
+                        // Results table
+                        item {
+                            Text(
+                                text = "ACCURACY TABLE",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        item {
+                            ResultsTableHeader()
+                        }
+                        items(results) { result ->
+                            ResultRow(
+                                result = result,
+                                formatMs = viewModel::formatMs,
+                                formatDeviation = viewModel::formatDeviation
+                            )
+                        }
+                    }
+
+                    ResultsTabs.DEVIATION -> {
+                        item {
+                            Text(
+                                text = "DEVIATION BY SPEED",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "Bars show how much each shutter speed deviates from expected. Left = slow (shutter open longer), Right = fast.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            DeviationBarChart(
+                                results = results,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    ResultsTabs.COMPARISON -> {
+                        item {
+                            Text(
+                                text = "EXPECTED VS MEASURED",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "Points on the diagonal line indicate perfect accuracy. Points above = slow shutter, below = fast shutter.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            SpeedComparisonChart(
+                                results = results,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                        }
+                    }
+
+                    ResultsTabs.TIMELINE -> {
+                        item {
+                            Text(
+                                text = "BRIGHTNESS TIMELINE",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
+                        item {
+                            Text(
+                                text = "Shows brightness over time. Green regions are detected shutter events. Dashed line is the detection threshold.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        item {
+                            timelineData?.let { data ->
+                                BrightnessTimelineChart(
+                                    brightnessValues = data.brightnessValues,
+                                    events = data.events,
+                                    threshold = data.threshold,
+                                    baseline = data.baseline,
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            } ?: Text(
+                                text = "No timeline data available",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
                 }
             }
 
-            // Average deviation card
-            item {
-                AverageDeviationCard(averageDeviation = averageDeviation)
-            }
-
-            // Results table header
-            item {
-                Text(
-                    text = "ACCURACY TABLE",
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.primary,
-                    fontWeight = FontWeight.Medium
-                )
-            }
-
-            // Results table
-            item {
-                ResultsTableHeader()
-            }
-
-            items(results) { result ->
-                ResultRow(
-                    result = result,
-                    formatMs = viewModel::formatMs,
-                    formatDeviation = viewModel::formatDeviation
-                )
-            }
-
-            // Bottom buttons
-            item {
-                Spacer(modifier = Modifier.height(16.dp))
-                BottomButtons(
-                    isSaved = isSaved,
-                    onSave = {
-                        viewModel.saveSession()
-                        onBackClick()
-                    },
-                    onTestAgain = onTestAgain
-                )
-            }
+            // Bottom buttons (always visible)
+            BottomButtons(
+                isSaved = isSaved,
+                onSave = {
+                    viewModel.saveSession()
+                    onBackClick()
+                },
+                onTestAgain = onTestAgain,
+                modifier = Modifier.padding(16.dp)
+            )
         }
     }
 }
 
 @Composable
-private fun AverageDeviationCard(averageDeviation: Double) {
+private fun AverageDeviationCard(
+    averageDeviation: Double,
+    modifier: Modifier = Modifier
+) {
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
@@ -270,10 +410,11 @@ private fun ResultRow(
 private fun BottomButtons(
     isSaved: Boolean,
     onSave: () -> Unit,
-    onTestAgain: () -> Unit
+    onTestAgain: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
