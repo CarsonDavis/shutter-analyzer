@@ -18,10 +18,16 @@ private const val SAMPLE_STEP = 4
  * @return Average brightness value (0-255)
  */
 fun ImageProxy.calculateBrightness(): Double {
+    // Safety check for planes
+    if (planes.isEmpty()) return 0.0
+
     val yPlane = planes[0]
     val buffer = yPlane.buffer
     val pixelStride = yPlane.pixelStride
     val rowStride = yPlane.rowStride
+
+    // Safety check for valid dimensions
+    if (width <= 0 || height <= 0 || rowStride <= 0) return 0.0
 
     var sum = 0L
     var sampleCount = 0
@@ -30,7 +36,7 @@ fun ImageProxy.calculateBrightness(): Double {
     for (y in 0 until height step SAMPLE_STEP) {
         for (x in 0 until width step SAMPLE_STEP) {
             val index = y * rowStride + x * pixelStride
-            if (index < buffer.capacity()) {
+            if (index >= 0 && index < buffer.capacity()) {
                 sum += buffer.get(index).toInt() and 0xFF
                 sampleCount++
             }
@@ -51,10 +57,16 @@ fun ImageProxy.calculateBrightness(): Double {
  * @return Average brightness value (0-255)
  */
 fun ImageProxy.calculateBrightness(sampleStep: Int): Double {
+    // Safety check for planes
+    if (planes.isEmpty()) return 0.0
+
     val yPlane = planes[0]
     val buffer = yPlane.buffer
     val pixelStride = yPlane.pixelStride
     val rowStride = yPlane.rowStride
+
+    // Safety check for valid dimensions
+    if (width <= 0 || height <= 0 || rowStride <= 0) return 0.0
 
     var sum = 0L
     var sampleCount = 0
@@ -62,7 +74,7 @@ fun ImageProxy.calculateBrightness(sampleStep: Int): Double {
     for (y in 0 until height step sampleStep) {
         for (x in 0 until width step sampleStep) {
             val index = y * rowStride + x * pixelStride
-            if (index < buffer.capacity()) {
+            if (index >= 0 && index < buffer.capacity()) {
                 sum += buffer.get(index).toInt() and 0xFF
                 sampleCount++
             }
@@ -84,10 +96,16 @@ fun ImageProxy.calculateBrightness(sampleStep: Int): Double {
  * @return Average brightness value (0-255)
  */
 fun ImageProxy.calculateCenterBrightness(centerFraction: Float = 0.5f): Double {
+    // Safety check for planes
+    if (planes.isEmpty()) return 0.0
+
     val yPlane = planes[0]
     val buffer = yPlane.buffer
     val pixelStride = yPlane.pixelStride
     val rowStride = yPlane.rowStride
+
+    // Safety check for valid dimensions
+    if (width <= 0 || height <= 0 || rowStride <= 0) return 0.0
 
     val marginX = ((1 - centerFraction) / 2 * width).toInt()
     val marginY = ((1 - centerFraction) / 2 * height).toInt()
@@ -98,7 +116,7 @@ fun ImageProxy.calculateCenterBrightness(centerFraction: Float = 0.5f): Double {
     for (y in marginY until (height - marginY) step SAMPLE_STEP) {
         for (x in marginX until (width - marginX) step SAMPLE_STEP) {
             val index = y * rowStride + x * pixelStride
-            if (index < buffer.capacity()) {
+            if (index >= 0 && index < buffer.capacity()) {
                 sum += buffer.get(index).toInt() and 0xFF
                 sampleCount++
             }

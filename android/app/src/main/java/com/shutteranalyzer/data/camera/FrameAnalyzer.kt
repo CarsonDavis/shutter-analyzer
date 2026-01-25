@@ -1,8 +1,11 @@
 package com.shutteranalyzer.data.camera
 
+import android.util.Log
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import javax.inject.Inject
+
+private const val TAG = "FrameAnalyzer"
 
 /**
  * CameraX ImageAnalysis.Analyzer for real-time frame processing.
@@ -101,6 +104,9 @@ class FrameAnalyzer @Inject constructor() : ImageAnalysis.Analyzer {
                     // No event, continue processing
                 }
             }
+        } catch (e: Exception) {
+            // Log but don't crash - camera frames can occasionally have issues
+            Log.e(TAG, "Error analyzing frame: ${e.message}", e)
         } finally {
             // CRITICAL: Always close the image to release the buffer
             image.close()
