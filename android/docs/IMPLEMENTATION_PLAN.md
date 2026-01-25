@@ -618,4 +618,5 @@ Test with actual test videos from `videos/` folder.
 - [APP_SPEC.md](APP_SPEC.md) - Requirements and flows
 - [WIREFRAMES.md](WIREFRAMES.md) - Screen mockups
 - [TECH_STACK.md](TECH_STACK.md) - Technology decisions
+- [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) - Progress tracking
 - [../../shutter_analyzer/](../../shutter_analyzer/) - Python implementation (source of truth for algorithms)

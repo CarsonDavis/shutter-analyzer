@@ -74,11 +74,546 @@ android/
 | Image Processing | OpenCV Android | Same algorithms as Python CLI |
 
 ### Next Steps
-- Phase 1: Project Setup & Core Analysis
-  - Create Android project with Compose
-  - Add dependencies
-  - Port brightness analyzer from Python
-  - Port shutter speed calculator from Python
-  - Write unit tests
+- Phase 1: Project Setup & Core Analysis ✅
+
+---
+
+## 2025-01-24 - Phase 1: Project Scaffold & Core Analysis Modules
+
+### Changes Made
+
+#### Project Scaffold
+- `android/settings.gradle.kts`: Root Gradle settings
+- `android/build.gradle.kts`: Root build file with plugin versions
+- `android/gradle.properties`: Gradle and Kotlin configuration
+- `android/gradle/wrapper/gradle-wrapper.properties`: Gradle 8.5 wrapper
+- `android/app/build.gradle.kts`: App-level build with dependencies (OpenCV, Hilt, Compose, testing)
+- `android/app/src/main/AndroidManifest.xml`: App manifest with camera and storage permissions
+- `android/app/src/main/res/values/strings.xml`: App name resource
+- `android/app/src/main/res/values/themes.xml`: Material theme
+- `android/app/src/main/java/com/shutteranalyzer/ShutterAnalyzerApp.kt`: Application class with OpenCV initialization
+- `android/app/src/main/java/com/shutteranalyzer/MainActivity.kt`: Placeholder activity with Compose
+
+#### Data Models (ported from Python)
+- `android/app/src/main/java/com/shutteranalyzer/analysis/model/BrightnessStats.kt`
+  - Port of Python `FrameBrightnessStats` dataclass
+  - Stores min/max/mean/median brightness, percentiles, baseline, threshold, peak
+
+- `android/app/src/main/java/com/shutteranalyzer/analysis/model/ShutterEvent.kt`
+  - Port of Python `ShutterEvent` class
+  - Properties: `durationFrames`, `weightedDurationFrames`, `maxBrightness`, `avgBrightness`
+  - Key algorithm: weighted duration using per-event median as plateau level
+  - Extension functions: `median()`, `percentile()`, `stdDev()`
+
+#### Analysis Modules (ported from Python)
+- `android/app/src/main/java/com/shutteranalyzer/analysis/BrightnessAnalyzer.kt`
+  - Port of `FrameAnalyzer.calculate_frame_brightness()`
+  - Uses OpenCV to convert to grayscale and calculate mean
+  - Memory-safe with Mat.release() in finally block
+
+- `android/app/src/main/java/com/shutteranalyzer/analysis/ThresholdCalculator.kt`
+  - Port of `FrameAnalyzer.analyze_brightness_distribution()`
+  - Original method: `baseline + (median - baseline) * marginFactor`
+  - Z-score method: iterates z=1.0-5.0 to find best match to expected events
+  - DBSCAN deferred to later phase
+
+- `android/app/src/main/java/com/shutteranalyzer/analysis/EventDetector.kt`
+  - Port of `FrameAnalyzer.find_shutter_events()`
+  - Port of `FrameAnalyzer.calculate_peak_brightness()` with plateau analysis
+  - Handles video ending with shutter open
+
+- `android/app/src/main/java/com/shutteranalyzer/analysis/ShutterSpeedCalculator.kt`
+  - Port of `ShutterSpeedCalculator` class
+  - `calculateShutterSpeed()`: converts weighted frames to 1/x speed
+  - `compareWithExpected()`: percentage error calculation
+  - `groupShutterEvents()`: matches events to expected speeds by duration
+  - `formatShutterSpeed()`: human-readable formatting
+
+#### Unit Tests
+- `android/app/src/test/java/com/shutteranalyzer/analysis/TestVectors.kt`: Test data and expected values
+- `android/app/src/test/java/com/shutteranalyzer/analysis/ExtensionFunctionsTest.kt`: Tests for median, percentile, stdDev
+- `android/app/src/test/java/com/shutteranalyzer/analysis/ThresholdCalculatorTest.kt`: Threshold calculation tests
+- `android/app/src/test/java/com/shutteranalyzer/analysis/EventDetectorTest.kt`: Event detection tests
+- `android/app/src/test/java/com/shutteranalyzer/analysis/ShutterSpeedCalculatorTest.kt`: Speed calculation tests
+- `android/app/src/test/java/com/shutteranalyzer/analysis/ShutterEventTest.kt`: ShutterEvent property tests
+
+### Project Structure After Phase 1
+```
+android/
+├── settings.gradle.kts
+├── build.gradle.kts
+├── gradle.properties
+├── gradle/wrapper/gradle-wrapper.properties
+├── docs/
+│   └── (documentation files)
+└── app/
+    ├── build.gradle.kts
+    └── src/
+        ├── main/
+        │   ├── AndroidManifest.xml
+        │   ├── res/values/{strings,themes}.xml
+        │   └── java/com/shutteranalyzer/
+        │       ├── ShutterAnalyzerApp.kt
+        │       ├── MainActivity.kt
+        │       └── analysis/
+        │           ├── model/
+        │           │   ├── BrightnessStats.kt
+        │           │   └── ShutterEvent.kt
+        │           ├── BrightnessAnalyzer.kt
+        │           ├── ThresholdCalculator.kt
+        │           ├── EventDetector.kt
+        │           └── ShutterSpeedCalculator.kt
+        └── test/java/com/shutteranalyzer/analysis/
+            ├── TestVectors.kt
+            ├── ExtensionFunctionsTest.kt
+            ├── ThresholdCalculatorTest.kt
+            ├── EventDetectorTest.kt
+            ├── ShutterSpeedCalculatorTest.kt
+            └── ShutterEventTest.kt
+```
+
+### Key Algorithm Ports
+
+#### Weighted Duration (ShutterEvent.kt)
+```kotlin
+val weightedDurationFrames: Double
+    get() {
+        val eventPeak = brightnessValues.median()  // Per-event median
+        if (eventPeak <= baselineBrightness) return durationFrames.toDouble()
+
+        val brightnessRange = eventPeak - baselineBrightness
+        return brightnessValues.sumOf { brightness ->
+            val weight = (brightness - baselineBrightness) / brightnessRange
+            weight.coerceIn(0.0, 1.0)
+        }
+    }
+```
+
+#### Original Threshold (ThresholdCalculator.kt)
+```kotlin
+val brightnessRange = medianBrightness - baseline
+var threshold = baseline + (brightnessRange * marginFactor)
+if (threshold == baseline) {
+    threshold = baseline + (maxBrightness - baseline) * 0.1
+}
+```
+
+### Next Steps
+- Phase 2: Database & Repository Layer ✅
+
+---
+
+## 2025-01-24 - Phase 2: Database & Repository Layer
+
+### Changes Made
+
+#### Room Entities
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/entity/CameraEntity.kt`
+  - Represents a camera profile (id, name, createdAt)
+
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/entity/TestSessionEntity.kt`
+  - Represents a test session with foreign key to Camera
+  - Fields: cameraId, recordingFps, testedAt, avgDeviationPercent
+
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/entity/ShutterEventEntity.kt`
+  - Represents a single shutter event measurement with foreign key to TestSession
+  - Fields: startFrame, endFrame, expectedSpeed, measuredSpeed, deviationPercent, brightnessValuesJson
+
+#### Type Converters
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/converter/Converters.kt`
+  - Converts List<Double> to/from comma-separated string for Room storage
+
+#### DAOs
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/dao/CameraDao.kt`
+  - getAllCameras(), getCameraById(), getTestCountForCamera(), insert(), update(), delete()
+
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/dao/TestSessionDao.kt`
+  - getSessionsForCamera(), getSessionById(), insert(), updateAvgDeviation(), delete()
+
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/dao/ShutterEventDao.kt`
+  - getEventsForSession(), getEventsForSessionOnce(), insertAll(), deleteForSession()
+
+#### Database
+- `android/app/src/main/java/com/shutteranalyzer/data/local/database/AppDatabase.kt`
+  - Room database with all 3 entities and type converters
+  - Database name: "shutter_analyzer.db"
+
+#### Domain Models
+- `android/app/src/main/java/com/shutteranalyzer/domain/model/Camera.kt`
+  - Clean domain model with Instant for dates, testCount property
+
+- `android/app/src/main/java/com/shutteranalyzer/domain/model/TestSession.kt`
+  - Domain model with events list, uses analysis ShutterEvent
+
+#### Repositories
+- `android/app/src/main/java/com/shutteranalyzer/data/repository/CameraRepository.kt`
+  - Interface + CameraRepositoryImpl
+  - Maps entities to domain models
+  - getAllCameras(), getCameraById(), saveCamera(), deleteCamera()
+
+- `android/app/src/main/java/com/shutteranalyzer/data/repository/TestSessionRepository.kt`
+  - Interface + TestSessionRepositoryImpl
+  - Handles session and event persistence
+  - getSessionsForCamera(), getSessionById(), saveSession(), saveEvents(), updateAvgDeviation()
+
+#### Hilt DI Modules
+- `android/app/src/main/java/com/shutteranalyzer/di/DatabaseModule.kt`
+  - Provides AppDatabase singleton and all DAOs
+
+- `android/app/src/main/java/com/shutteranalyzer/di/RepositoryModule.kt`
+  - Binds repository implementations to interfaces
+
+### Database Schema
+```
+┌─────────────────┐     ┌──────────────────────┐     ┌─────────────────────┐
+│    cameras      │     │   test_sessions      │     │   shutter_events    │
+├─────────────────┤     ├──────────────────────┤     ├─────────────────────┤
+│ id (PK)         │──┐  │ id (PK)              │──┐  │ id (PK)             │
+│ name            │  │  │ cameraId (FK) ───────│──┘  │ sessionId (FK) ─────│
+│ createdAt       │  │  │ recordingFps         │     │ startFrame          │
+└─────────────────┘  │  │ testedAt             │     │ endFrame            │
+                     │  │ avgDeviationPercent  │     │ expectedSpeed       │
+                     └──└──────────────────────┘     │ measuredSpeed       │
+                                                     │ deviationPercent    │
+                                                     │ brightnessValuesJson│
+                                                     └─────────────────────┘
+```
+
+### Project Structure After Phase 2
+```
+android/app/src/main/java/com/shutteranalyzer/
+├── ShutterAnalyzerApp.kt
+├── MainActivity.kt
+├── analysis/                    # Phase 1
+│   ├── model/
+│   ├── BrightnessAnalyzer.kt
+│   ├── ThresholdCalculator.kt
+│   ├── EventDetector.kt
+│   └── ShutterSpeedCalculator.kt
+├── data/                        # Phase 2 (NEW)
+│   ├── local/database/
+│   │   ├── entity/
+│   │   │   ├── CameraEntity.kt
+│   │   │   ├── TestSessionEntity.kt
+│   │   │   └── ShutterEventEntity.kt
+│   │   ├── dao/
+│   │   │   ├── CameraDao.kt
+│   │   │   ├── TestSessionDao.kt
+│   │   │   └── ShutterEventDao.kt
+│   │   ├── converter/
+│   │   │   └── Converters.kt
+│   │   └── AppDatabase.kt
+│   └── repository/
+│       ├── CameraRepository.kt
+│       └── TestSessionRepository.kt
+├── domain/                      # Phase 2 (NEW)
+│   └── model/
+│       ├── Camera.kt
+│       └── TestSession.kt
+└── di/                          # Phase 2 (NEW)
+    ├── DatabaseModule.kt
+    └── RepositoryModule.kt
+```
+
+### Next Steps
+- Phase 3: Camera Integration ✅
+
+---
+
+## 2025-01-24 - Phase 3: Camera Integration
+
+### Changes Made
+
+#### Dependencies Added (`app/build.gradle.kts`)
+- CameraX (camera-core, camera2, lifecycle, video, view) v1.3.1
+- Room (runtime, ktx, compiler) v2.6.1 - was missing from Phase 2
+- lifecycle-viewmodel-compose v2.7.0
+- hilt-navigation-compose v1.1.0
+
+#### Camera Layer Files
+- `android/app/src/main/java/com/shutteranalyzer/data/camera/SlowMotionCapability.kt`
+  - `SlowMotionCapability` data class for device capabilities
+  - `SlowMotionCapabilityChecker` - detects max FPS, supported ranges, high-speed sizes
+  - `getBestFpsForAccuracy()` - recommends FPS for target shutter speed
+  - `getAccuracyDescription()` - human-readable accuracy info
+
+- `android/app/src/main/java/com/shutteranalyzer/data/camera/ImageProxyExtensions.kt`
+  - `ImageProxy.calculateBrightness()` - efficient brightness from Y plane
+  - Samples every 4th pixel for performance (1/16 of total pixels)
+  - `calculateCenterBrightness()` - center region only (ignores edges)
+
+- `android/app/src/main/java/com/shutteranalyzer/data/camera/LiveEventDetector.kt`
+  - State machine: Calibrating → WaitingForEvent → EventInProgress
+  - `DetectorState` sealed class for state representation
+  - `EventResult` sealed class: CalibrationComplete, EventDetected
+  - Calibration: collects frames, calculates baseline (25th percentile) and threshold
+  - Threshold: `baseline + (median - baseline) * 1.5`
+  - Tracks brightness values during events for later analysis
+
+- `android/app/src/main/java/com/shutteranalyzer/data/camera/FrameAnalyzer.kt`
+  - Implements `ImageAnalysis.Analyzer` for CameraX
+  - Calculates brightness per frame, feeds to LiveEventDetector
+  - Callbacks: onEventDetected, onCalibrationComplete, onBrightnessUpdate, onCalibrationProgress
+  - Always closes ImageProxy to prevent memory leaks
+
+- `android/app/src/main/java/com/shutteranalyzer/data/camera/ShutterCameraManager.kt`
+  - Main camera controller using CameraX
+  - `initialize()` - gets ProcessCameraProvider
+  - `bindPreview()` - binds Preview, ImageAnalysis, VideoCapture to lifecycle
+  - `startRecording()` / `stopRecording()` - video recording to MediaStore
+  - StateFlows: cameraState, isRecording, currentBrightness, detectedEvents, calibrationProgress
+  - `EventMarker` data class for detected events with timestamps
+
+#### Hilt Module
+- `android/app/src/main/java/com/shutteranalyzer/di/CameraModule.kt`
+  - Provides FrameAnalyzer, SlowMotionCapabilityChecker, ShutterCameraManager
+
+#### Unit Tests
+- `android/app/src/test/java/com/shutteranalyzer/data/camera/LiveEventDetectorTest.kt`
+  - Tests state transitions, calibration, event detection, reset functionality
+
+### Key Design Decisions
+
+#### CameraX vs Camera2 for High-Speed Recording
+CameraX's VideoCapture doesn't natively support >60fps recording. Decision:
+- **Phase 3**: Use standard CameraX (up to 60fps)
+- **Future**: Add Camera2 interop for true 120/240fps if needed
+- **Workaround**: Users can import slow-mo videos from device camera app
+
+#### Efficient Brightness Calculation
+Instead of converting full ImageProxy to OpenCV Mat:
+- Use Y plane directly (luminance channel in YUV format)
+- Sample every 4th pixel (16x faster than full scan)
+- Still accurate enough for threshold detection
+
+### Project Structure After Phase 3
+```
+android/app/src/main/java/com/shutteranalyzer/
+├── ShutterAnalyzerApp.kt
+├── MainActivity.kt
+├── analysis/                    # Phase 1
+├── data/
+│   ├── local/database/          # Phase 2
+│   ├── repository/              # Phase 2
+│   └── camera/                  # Phase 3 (NEW)
+│       ├── SlowMotionCapability.kt
+│       ├── ImageProxyExtensions.kt
+│       ├── LiveEventDetector.kt
+│       ├── FrameAnalyzer.kt
+│       └── ShutterCameraManager.kt
+├── domain/model/                # Phase 2
+└── di/
+    ├── DatabaseModule.kt        # Phase 2
+    ├── RepositoryModule.kt      # Phase 2
+    └── CameraModule.kt          # Phase 3 (NEW)
+```
+
+### Next Steps
+- Phase 4: UI - Core Screens ✅
+
+---
+
+## 2025-01-25 - Phase 4: UI Layer
+
+### Changes Made
+
+#### Dependencies Added (`app/build.gradle.kts`)
+- `androidx.lifecycle:lifecycle-runtime-compose:2.7.0` - for `collectAsStateWithLifecycle()`
+- `androidx.navigation:navigation-compose:2.7.7` - Jetpack Navigation for Compose
+
+#### Theme Files (`ui/theme/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/theme/Color.kt`
+  - Accuracy indicator colors: Green (0-5%), Yellow (5-10%), Orange (10-15%), Red (>15%)
+  - Context frame color: Blue
+  - Light/Dark theme colors
+  - Helper functions: `getAccuracyColor()`, `getAccuracyLabel()`
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/theme/Type.kt`
+  - Standard Material3 typography scales
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/theme/Theme.kt`
+  - `ShutterAnalyzerTheme` composable
+  - Supports dynamic color (Android 12+) and light/dark modes
+
+#### Navigation (`ui/navigation/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/navigation/NavGraph.kt`
+  - `Screen` sealed class with routes: Home, RecordingSetup, Recording, EventReview, Results
+  - `NavGraph` composable with NavHost
+  - Handles session ID passing between screens
+
+#### Reusable Components (`ui/components/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/components/AccuracyIndicator.kt`
+  - `AccuracyIndicator` - colored badge showing deviation percentage
+  - `AccuracyDot` - simple colored dot indicator
+  - `getAccuracyRowColor()` - for table row backgrounds
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/components/CameraCard.kt`
+  - Card displaying camera name, last test date, average deviation
+  - Used in HomeScreen camera list
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/components/SpeedChip.kt`
+  - `SpeedChip` - selectable chip with states: unselected, selected, detected
+  - `SpeedDisplayChip` - non-interactive display during recording
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/components/BrightnessIndicator.kt`
+  - `BrightnessIndicator` - vertical bar with threshold marker
+  - `HorizontalBrightnessBar` - alternative horizontal display
+
+#### Home Screen (`ui/screens/home/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/home/HomeViewModel.kt`
+  - `cameras` StateFlow from repository
+  - `isEmpty` StateFlow for empty state detection
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/home/HomeScreen.kt`
+  - Large top app bar with "SHUTTER ANALYZER" title
+  - Camera list (LazyColumn of CameraCards)
+  - Empty state with icon and instructions
+  - Bottom buttons: "+ NEW TEST" and "IMPORT"
+
+#### Recording Setup Screen (`ui/screens/setup/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/setup/RecordingSetupViewModel.kt`
+  - Camera name input handling
+  - Speed set selection (Standard vs Custom)
+  - Device FPS capability detection
+  - Session creation (creates Camera if name provided)
+  - `STANDARD_SPEEDS` constant for default speed list
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/setup/RecordingSetupScreen.kt`
+  - Camera name text field
+  - Radio selection for Standard/Custom speed sets
+  - Speed picker bottom sheet for custom selection
+  - Collapsible setup reminder card
+  - Camera permission request on "START RECORDING"
+
+#### Recording Screen (`ui/screens/recording/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/recording/RecordingViewModel.kt`
+  - `RecordingState` sealed class: Initializing, Calibrating, WaitingForShutter, EventDetected, Complete, Error
+  - Camera initialization and recording control
+  - Event observation with auto-advance
+  - Skip/Redo/Done actions
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/recording/RecordingScreen.kt`
+  - CameraX PreviewView (full screen)
+  - State-based overlays:
+    - Calibrating: progress bar, "Hold camera steady"
+    - Waiting: speed prompt with Redo/Skip/Done buttons
+    - Detected: green checkmark animation with speed
+    - Error: retry/cancel dialog
+  - Header with FPS and progress indicator
+
+#### Event Review Screen (`ui/screens/review/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/review/EventReviewViewModel.kt`
+  - `FrameInfo` and `ReviewEvent` data classes
+  - Frame inclusion toggle support
+  - Event navigation (next/previous)
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/review/EventReviewScreen.kt`
+  - Event header with speed label
+  - Frame thumbnail grid (FlowRow)
+  - Color-coded frames: green (full), orange (partial), blue (context)
+  - Tap to toggle frame inclusion
+  - Navigation controls with Prev/Next
+  - "CONFIRM & CALCULATE" button
+
+#### Results Screen (`ui/screens/results/`)
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/results/ResultsViewModel.kt`
+  - `ShutterResult` data class for display
+  - Results calculation from events
+  - Average deviation calculation
+  - Formatting helpers for ms and deviation
+
+- `android/app/src/main/java/com/shutteranalyzer/ui/screens/results/ResultsScreen.kt`
+  - Camera name and date header
+  - Average deviation card with AccuracyIndicator
+  - Results table with color-coded rows
+  - Columns: Speed, Expected, Actual, Error
+  - SAVE and TEST AGAIN buttons
+
+#### MainActivity Update
+- `android/app/src/main/java/com/shutteranalyzer/MainActivity.kt`
+  - Updated to use `ShutterAnalyzerTheme`
+  - Navigation setup with `rememberNavController()`
+  - `NavGraph` as root composable
+
+### Project Structure After Phase 4
+```
+android/app/src/main/java/com/shutteranalyzer/
+├── ShutterAnalyzerApp.kt
+├── MainActivity.kt                  # Updated with navigation
+├── analysis/                        # Phase 1
+├── data/
+│   ├── local/database/              # Phase 2
+│   ├── repository/                  # Phase 2
+│   └── camera/                      # Phase 3
+├── domain/model/                    # Phase 2
+├── di/                              # Phase 2-3
+└── ui/                              # Phase 4 (NEW)
+    ├── navigation/
+    │   └── NavGraph.kt
+    ├── theme/
+    │   ├── Color.kt
+    │   ├── Type.kt
+    │   └── Theme.kt
+    ├── components/
+    │   ├── AccuracyIndicator.kt
+    │   ├── CameraCard.kt
+    │   ├── SpeedChip.kt
+    │   └── BrightnessIndicator.kt
+    └── screens/
+        ├── home/
+        │   ├── HomeScreen.kt
+        │   └── HomeViewModel.kt
+        ├── setup/
+        │   ├── RecordingSetupScreen.kt
+        │   └── RecordingSetupViewModel.kt
+        ├── recording/
+        │   ├── RecordingScreen.kt
+        │   └── RecordingViewModel.kt
+        ├── review/
+        │   ├── EventReviewScreen.kt
+        │   └── EventReviewViewModel.kt
+        └── results/
+            ├── ResultsScreen.kt
+            └── ResultsViewModel.kt
+```
+
+### Key Implementation Patterns
+
+#### State Management
+```kotlin
+// ViewModel with StateFlow
+val cameras: StateFlow<List<Camera>> = cameraRepository.getAllCameras()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+// Composable collection
+val cameras by viewModel.cameras.collectAsStateWithLifecycle()
+```
+
+#### Navigation with Arguments
+```kotlin
+composable(
+    route = "recording/{sessionId}",
+    arguments = listOf(navArgument("sessionId") { type = NavType.LongType })
+) { backStackEntry ->
+    val sessionId = backStackEntry.arguments?.getLong("sessionId") ?: return@composable
+    RecordingScreen(sessionId = sessionId, ...)
+}
+```
+
+#### Camera Permission
+```kotlin
+val permissionLauncher = rememberLauncherForActivityResult(
+    contract = ActivityResultContracts.RequestPermission()
+) { isGranted ->
+    if (isGranted) { /* proceed */ }
+}
+permissionLauncher.launch(Manifest.permission.CAMERA)
+```
+
+### Next Steps
+- Phase 5: Analysis Pipeline Integration
+  - Connect recording flow to actual analysis
+  - Wire up event detection to results calculation
+  - Add video import flow
 
 ---

@@ -36,6 +36,9 @@ shutter-analyzer/
 │   ├── verify.py                  # Manual verification tool
 │   └── main.py                    # CLI entry point
 ├── android/                       # Android app (Kotlin/Compose)
+│   ├── settings.gradle.kts        # Gradle settings
+│   ├── build.gradle.kts           # Root build file
+│   ├── gradle.properties          # Gradle configuration
 │   ├── docs/                      # Android documentation
 │   │   ├── APP_SPEC.md            # App specification
 │   │   ├── WIREFRAMES.md          # Screen mockups
@@ -44,7 +47,30 @@ shutter-analyzer/
 │   │   ├── IMPLEMENTATION_LOG.md  # Progress tracking
 │   │   ├── THEORY.md              # Shutter measurement theory
 │   │   └── HOW_TO.md              # Usage guide
-│   └── app/                       # Android app source (see IMPLEMENTATION_PLAN.md)
+│   └── app/
+│       ├── build.gradle.kts       # App build with dependencies
+│       └── src/
+│           ├── main/java/com/shutteranalyzer/
+│           │   ├── ShutterAnalyzerApp.kt      # Application class
+│           │   ├── MainActivity.kt            # Main activity
+│           │   ├── analysis/                  # Core analysis modules (Phase 1)
+│           │   │   ├── model/{BrightnessStats,ShutterEvent}.kt
+│           │   │   ├── BrightnessAnalyzer.kt
+│           │   │   ├── ThresholdCalculator.kt
+│           │   │   ├── EventDetector.kt
+│           │   │   └── ShutterSpeedCalculator.kt
+│           │   ├── data/                      # Data layer
+│           │   │   ├── local/database/        # Room entities, DAOs, AppDatabase (Phase 2)
+│           │   │   ├── repository/            # Repositories (Phase 2)
+│           │   │   └── camera/                # CameraX + live detection (Phase 3)
+│           │   ├── domain/model/              # Domain models (Phase 2)
+│           │   ├── di/                        # Hilt DI modules
+│           │   └── ui/                        # UI layer (Phase 4)
+│           │       ├── navigation/            # NavGraph
+│           │       ├── theme/                 # Color, Type, Theme
+│           │       ├── components/            # AccuracyIndicator, CameraCard, SpeedChip, BrightnessIndicator
+│           │       └── screens/               # home/, setup/, recording/, review/, results/
+│           └── test/java/com/shutteranalyzer/  # Unit tests
 ├── videos/                        # Input video files
 │   └── *.mp4                      # Test videos
 ├── outputs/                       # Generated outputs (gitignored except examples/)
@@ -309,4 +335,19 @@ Located in `docs/research/google-play-publishing/`:
 
 ## Implementation Status
 
+### Python CLI Tool
 See [REQUIREMENTS.md](REQUIREMENTS.md#current-implementation-status) for detailed status of each requirement.
+
+### Android App
+See [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) for detailed progress.
+
+| Phase | Description | Status |
+|-------|-------------|--------|
+| Phase 0 | Planning & Documentation | ✅ Complete |
+| Phase 1 | Project Scaffold & Core Analysis | ✅ Complete |
+| Phase 2 | Database & Repository Layer | ✅ Complete |
+| Phase 3 | Camera Capture | ✅ Complete |
+| Phase 4 | UI Screens | ✅ Complete |
+| Phase 5 | Analysis Pipeline | ⏳ Pending |
+| Phase 6 | Polish & Testing | ⏳ Pending |
+| Phase 7 | Publishing | ⏳ Pending |
