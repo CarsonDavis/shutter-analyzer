@@ -299,16 +299,26 @@ class FrameAnalyzer:
 
     @staticmethod
     def calculate_peak_brightness(
-        events: List[Tuple[int, int, List[float]]]
+        events: List[Tuple[int, int, List[float]]],
+        plateau_threshold: float = 0.90,
+        min_plateau_frames: int = 10,
     ) -> Optional[float]:
         """
-        Calculate the peak brightness from detected events.
+        Calculate the peak brightness from detected events using plateau analysis.
 
-        Uses the 95th percentile of all brightness values during events
-        to represent the typical fully-open shutter brightness.
+        Instead of using a simple percentile, this method:
+        1. Identifies plateau frames within each event (frames >= 90% of event max)
+        2. Only considers events with sufficient plateau frames (stable readings)
+        3. Calculates the mean plateau brightness for each qualifying event
+        4. Returns the median of these plateau means
+
+        This gives a robust estimate of "fully open" brightness that isn't
+        skewed by outliers or short events that never fully stabilize.
 
         Args:
             events: List of (start_frame, end_frame, brightness_values) tuples
+            plateau_threshold: Fraction of event max to consider as plateau (default 0.90)
+            min_plateau_frames: Minimum plateau frames for event to qualify (default 10)
 
         Returns:
             Peak brightness value, or None if no events
@@ -316,16 +326,38 @@ class FrameAnalyzer:
         if not events:
             return None
 
-        # Collect all brightness values from events
+        plateau_means = []
+
+        for _, _, brightness_values in events:
+            if not brightness_values:
+                continue
+
+            b = np.array(brightness_values)
+            event_max = b.max()
+
+            # Find plateau frames (within threshold of event max)
+            plateau_mask = b >= (event_max * plateau_threshold)
+            plateau_count = plateau_mask.sum()
+
+            # Only use events with enough stable plateau frames
+            if plateau_count >= min_plateau_frames:
+                plateau_mean = b[plateau_mask].mean()
+                plateau_means.append(plateau_mean)
+
+        if plateau_means:
+            # Use median of plateau means for robustness
+            return float(np.median(plateau_means))
+
+        # Fallback: if no events have enough plateau frames,
+        # use 95th percentile of all event brightness values
         all_event_brightness = []
         for _, _, brightness_values in events:
             all_event_brightness.extend(brightness_values)
 
-        if not all_event_brightness:
-            return None
+        if all_event_brightness:
+            return float(np.percentile(all_event_brightness, 95))
 
-        # Use 95th percentile as peak (avoid outliers)
-        return float(np.percentile(all_event_brightness, 95))
+        return None
 
     @classmethod
     def analyze_video_and_find_events(

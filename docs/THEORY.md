@@ -100,13 +100,29 @@ weight = (brightness - baseline) / (peak - baseline)
 
 Where:
 - `baseline` = brightness when shutter is fully closed
-- `peak` = brightness when shutter is fully open
+- `peak` = **median brightness of the event** (represents the plateau level)
 - `brightness` = brightness of the current frame
 
 The weight is clamped to the range [0, 1]:
 - Frame at baseline brightness → weight = 0 (contributes nothing)
-- Frame at peak brightness → weight = 1 (contributes full frame)
-- Frame at 50% between baseline and peak → weight = 0.5
+- Frame at or above median → weight = 1 (fully open, plateau)
+- Frame between baseline and median → proportional weight (transition)
+
+### Why Use Per-Event Median?
+
+Using the **median** of each event's brightness values as the peak naturally identifies the plateau level:
+
+```
+Example event: [20, 80, 80, 80, 100, 100, 80, 20]
+Median = 80 (the plateau level)
+
+Frame weights:
+- 20 → 20/80 = 0.25 (transition frame)
+- 80 → 80/80 = 1.00 (plateau - FULL)
+- 100 → clamped to 1.00 (plateau - FULL)
+```
+
+This approach correctly recognizes that all plateau frames (whether 80 or 100) represent "fully open" for that event, while only the transition frames (20) contribute partial weight.
 
 **Weighted duration:**
 ```
@@ -115,23 +131,24 @@ weighted_duration = sum(weight for each frame in event)
 
 ### Example
 
-Consider a 4-frame event with these brightness values:
-- Frame 1: brightness = 5 (just opened)
-- Frame 2: brightness = 18 (fully open)
-- Frame 3: brightness = 20 (fully open)
-- Frame 4: brightness = 8 (closing)
+Consider a 10-frame event with brightness values:
+```
+[6.5, 7.1, 7.2, 7.1, 7.2, 7.2, 7.2, 7.1, 7.1, 2.5]
+```
 
-With baseline = 0 and peak = 20:
-- Frame 1: weight = 5/20 = 0.25
-- Frame 2: weight = 18/20 = 0.90
-- Frame 3: weight = 20/20 = 1.00
-- Frame 4: weight = 8/20 = 0.40
+- Median = 7.15 (plateau level)
+- Baseline = 0
 
-Weighted duration = 0.25 + 0.90 + 1.00 + 0.40 = **2.55 frames**
+Frame weights:
+- Frame 1 (6.5): 6.5/7.15 = 0.91 (opening)
+- Frames 2-9 (7.1-7.2): ≥0.99 → 1.0 (plateau)
+- Frame 10 (2.5): 2.5/7.15 = 0.35 (closing)
 
-Compare to simple count = **4 frames**
+Weighted duration = 0.91 + 8×1.0 + 0.35 = **9.26 frames**
 
-The weighted value more accurately represents the effective exposure time.
+Compare to simple count = **10 frames**
+
+The weighted value accounts for the partial opening and closing frames.
 
 ---
 

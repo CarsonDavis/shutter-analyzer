@@ -59,30 +59,39 @@ class ShutterEvent:
         """
         Calculate weighted duration where partial-open frames contribute proportionally.
 
-        A frame at baseline brightness contributes 0.
-        A frame at peak brightness contributes 1.
-        Intermediate values are linearly interpolated.
+        Uses per-event peak calculation based on median brightness, which naturally
+        identifies the plateau level. This means:
+        - Plateau frames (at or above median) contribute 1.0
+        - Transition frames (below median) contribute proportionally
 
-        If baseline/peak brightness are not set, falls back to simple frame count.
+        Example: brightness values [20, 80, 80, 100, 100, 80, 20]
+        - Median = 80 (the plateau level)
+        - 20 → weight 0.25 (transition)
+        - 80, 100 → weight 1.0 (plateau/fully open)
 
         Returns:
             Weighted frame count (float)
         """
-        # Fall back to simple count if weighting parameters not available
-        if self.baseline_brightness is None or self.peak_brightness is None:
+        if not self.brightness_values:
             return float(self.duration_frames)
 
+        if self.baseline_brightness is None:
+            return float(self.duration_frames)
+
+        # Use median of this event's brightness as the peak (plateau level)
+        event_peak = float(np.median(self.brightness_values))
+
         # Fall back if peak is not greater than baseline
-        if self.peak_brightness <= self.baseline_brightness:
+        if event_peak <= self.baseline_brightness:
             return float(self.duration_frames)
 
         total = 0.0
-        brightness_range = self.peak_brightness - self.baseline_brightness
+        brightness_range = event_peak - self.baseline_brightness
 
         for brightness in self.brightness_values:
-            # Calculate weight: 0 at baseline, 1 at peak
+            # Calculate weight: 0 at baseline, 1 at event's median (plateau)
             weight = (brightness - self.baseline_brightness) / brightness_range
-            # Clamp to [0, 1] range
+            # Clamp to [0, 1] - frames above median also count as 1.0
             weight = max(0.0, min(1.0, weight))
             total += weight
 

@@ -1,21 +1,31 @@
 """Manual verification tool for event detection.
 
-This module provides a visual tool to validate that shutter events are being
-detected correctly. It displays side-by-side comparisons of frames at event
-boundaries, allowing quick visual confirmation that thresholds are working.
+This module provides visual tools to validate that shutter events are being
+detected correctly:
+
+1. Interactive mode: Step through events showing before/after frames
+2. Montage mode: Generate PNG images showing all frames in each event
+   with brightness weights labeled (FULL, PARTIAL, etc.)
 
 Usage:
-    uv run python -m shutter_analyzer.verify videos/test.mp4 [--method original]
+    # Interactive verification
+    uv run python -m shutter_analyzer.verify videos/test.mp4
+
+    # Generate frame montages for each event
+    uv run python -m shutter_analyzer.verify videos/test.mp4 --montage
 """
 
 import argparse
 import cv2
 import numpy as np
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, Tuple, Optional
+
+import matplotlib.pyplot as plt
 
 from .video_processor import VideoReader
 from .frame_analyzer import FrameAnalyzer
+from .output import get_output_dir
 
 
 def annotate_frame(
@@ -201,10 +211,170 @@ def verify_events(video_path: str, method: str = "original") -> None:
     print("Verification complete.")
 
 
+def generate_event_montages(
+    video_path: str,
+    method: str = "original",
+    max_frames_per_image: int = 20,
+    expected_events_count: Optional[int] = None,
+) -> List[Path]:
+    """
+    Generate montage images showing all frames in each detected event.
+
+    Each frame is labeled with its brightness weight (FULL, percentage, etc.)
+    to visualize the shutter opening/closing pattern.
+
+    Args:
+        video_path: Path to the video file
+        method: Detection method ("original", "zscore", or "dbscan")
+        max_frames_per_image: Maximum frames to show per montage (longer events
+                              show first half + last half)
+        expected_events_count: Expected number of events (for zscore/dbscan)
+
+    Returns:
+        List of paths to generated montage images
+    """
+    # Open video and run analysis
+    video = VideoReader.open_video(video_path)
+    props = VideoReader.get_video_properties(video)
+
+    print(f"Analyzing {video_path}...")
+    print(f"  {props['frame_count']} frames @ {props['fps']} fps")
+
+    video.set(cv2.CAP_PROP_POS_FRAMES, 0)
+    frames_gen = VideoReader.read_frames(video)
+    stats, events = FrameAnalyzer.analyze_video_and_find_events(
+        frames_gen, method=method, expected_events_count=expected_events_count
+    )
+
+    print(f"  Found {len(events)} events")
+    print(f"  Baseline: {stats.baseline:.2f}")
+    print(f"  Peak: {stats.peak_brightness:.2f}")
+
+    # Get output directory
+    output_dir = get_output_dir(video_path)
+    generated_files = []
+
+    peak = stats.peak_brightness
+    baseline = stats.baseline
+
+    for event_idx, (start, end, brightness_vals) in enumerate(events):
+        n_frames = len(brightness_vals)
+
+        # Determine which event frames to show
+        if n_frames <= max_frames_per_image - 2:  # Reserve 2 slots for before/after
+            event_indices = list(range(n_frames))
+            title_suffix = f"{n_frames} frames"
+        else:
+            # Show first half and last half
+            half = (max_frames_per_image - 2) // 2
+            event_indices = list(range(half)) + list(range(n_frames - half, n_frames))
+            title_suffix = f"{n_frames} frames (showing first {half} + last {half})"
+
+        # Build full list: [before] + event_indices + [after]
+        # We'll track which are "context" frames vs "event" frames
+        frames_to_show = []  # List of (frame_num, brightness, is_context, label_prefix)
+
+        # Frame before event (if exists)
+        if start > 0:
+            before_frame = start - 1
+            # We need to get brightness for this frame from the full video
+            before_brightness = None  # Will fetch below
+            frames_to_show.append((before_frame, None, True, "BEFORE"))
+
+        # Event frames
+        for idx in event_indices:
+            frame_num = start + idx
+            frames_to_show.append((frame_num, brightness_vals[idx], False, f"F{idx + 1}"))
+
+        # Frame after event (if exists)
+        after_frame = end + 1
+        frames_to_show.append((after_frame, None, True, "AFTER"))
+
+        # Create figure
+        n_cols = len(frames_to_show)
+        fig_width = max(n_cols * 1.5, 6)
+        fig, axes = plt.subplots(1, n_cols, figsize=(fig_width, 3))
+        if n_cols == 1:
+            axes = [axes]
+
+        fig.suptitle(f"Event {event_idx + 1} - {title_suffix}", fontsize=12)
+
+        # Calculate per-event peak using median (identifies plateau level)
+        event_peak = float(np.median(brightness_vals))
+
+        for ax_idx, (frame_num, brightness, is_context, label_prefix) in enumerate(frames_to_show):
+            frame = VideoReader.get_frame_at_index(video, frame_num)
+
+            if frame is None:
+                continue
+
+            # Convert BGR to RGB for matplotlib
+            frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+
+            # Get brightness - calculate if not provided (for context frames)
+            if brightness is None:
+                brightness = float(np.mean(cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)))
+
+            if is_context:
+                # Context frames (before/after) - show in gray/blue
+                label = label_prefix
+                color = "blue"
+                title_text = f"{label}\nb={brightness:.1f}"
+            else:
+                # Event frames - calculate weight using per-event peak (median)
+                if event_peak > baseline:
+                    weight = (brightness - baseline) / (event_peak - baseline)
+                    weight = max(0, min(1, weight))
+                else:
+                    weight = 1.0
+
+                # Classify and color
+                if weight >= 0.95:
+                    label = "FULL"
+                    color = "green"
+                elif weight >= 0.5:
+                    label = f"{int(weight * 100)}%"
+                    color = "orange"
+                else:
+                    label = f"{int(weight * 100)}%"
+                    color = "red"
+
+                title_text = f"{label_prefix}:{label}\nb={brightness:.1f}"
+
+            axes[ax_idx].imshow(frame_rgb)
+            axes[ax_idx].set_title(title_text, fontsize=8, color=color)
+            axes[ax_idx].axis("off")
+
+        plt.tight_layout()
+
+        # Save
+        output_path = output_dir / f"event_{event_idx + 1:02d}_frames.png"
+        plt.savefig(output_path, dpi=100, bbox_inches="tight")
+        plt.close()
+
+        generated_files.append(output_path)
+        print(f"  Saved: {output_path.name}")
+
+    video.release()
+    return generated_files
+
+
 def main() -> None:
     """CLI entry point for the verification tool."""
     parser = argparse.ArgumentParser(
-        description="Verify shutter event detection visually"
+        description="Verify shutter event detection visually",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+    # Interactive mode - step through events
+    uv run python -m shutter_analyzer.verify videos/test.mp4
+
+    # Generate frame montages for each event
+    uv run python -m shutter_analyzer.verify videos/test.mp4 --montage
+
+    # Use different detection method
+    uv run python -m shutter_analyzer.verify videos/test.mp4 --montage --method zscore --events 10
+        """,
     )
     parser.add_argument("video", help="Path to video file")
     parser.add_argument(
@@ -213,6 +383,16 @@ def main() -> None:
         default="original",
         help="Detection method (default: original)",
     )
+    parser.add_argument(
+        "--montage",
+        action="store_true",
+        help="Generate frame montage images instead of interactive mode",
+    )
+    parser.add_argument(
+        "--events",
+        type=int,
+        help="Expected number of events (required for zscore/dbscan methods)",
+    )
     args = parser.parse_args()
 
     # Check if video exists
@@ -220,7 +400,18 @@ def main() -> None:
         print(f"Error: Video file not found: {args.video}")
         return
 
-    verify_events(args.video, args.method)
+    if args.montage:
+        # Generate montage images
+        files = generate_event_montages(
+            args.video,
+            method=args.method,
+            expected_events_count=args.events,
+        )
+        print(f"\nGenerated {len(files)} montage images")
+        print(f"Open with: open {files[0].parent}/event_*.png")
+    else:
+        # Interactive mode
+        verify_events(args.video, args.method)
 
 
 if __name__ == "__main__":
