@@ -235,6 +235,10 @@ class ShutterCameraManager @Inject constructor(
             return
         }
 
+        // Stop any existing recording first
+        recording?.stop()
+        recording = null
+
         // Reset events for new recording
         _detectedEvents.value = emptyList()
         eventIndex = 0

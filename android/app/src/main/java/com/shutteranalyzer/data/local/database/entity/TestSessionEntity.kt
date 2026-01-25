@@ -9,7 +9,8 @@ import androidx.room.PrimaryKey
  * Room entity representing a test session for a camera.
  *
  * A test session records one set of shutter speed measurements.
- * It has a foreign key relationship to CameraEntity.
+ * It has an optional foreign key relationship to CameraEntity.
+ * Sessions can exist without an associated camera.
  */
 @Entity(
     tableName = "test_sessions",
@@ -26,9 +27,9 @@ data class TestSessionEntity(
     @PrimaryKey(autoGenerate = true)
     val id: Long = 0,
 
-    /** Foreign key to the camera this session belongs to */
+    /** Foreign key to the camera this session belongs to (null if no camera) */
     @ColumnInfo(index = true)
-    val cameraId: Long,
+    val cameraId: Long? = null,
 
     /** Recording frame rate used for this test (e.g., 240.0 for 240fps slow-mo) */
     val recordingFps: Double,

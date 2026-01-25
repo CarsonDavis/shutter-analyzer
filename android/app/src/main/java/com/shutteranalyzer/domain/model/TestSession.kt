@@ -10,7 +10,7 @@ import java.time.Instant
  */
 data class TestSession(
     val id: Long = 0,
-    val cameraId: Long,
+    val cameraId: Long? = null,
     val recordingFps: Double,
     val testedAt: Instant,
     val avgDeviationPercent: Double?,

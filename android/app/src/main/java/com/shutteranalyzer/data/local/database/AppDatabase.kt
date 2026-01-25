@@ -24,7 +24,7 @@ import com.shutteranalyzer.data.local.database.entity.TestSessionEntity
         TestSessionEntity::class,
         ShutterEventEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -50,6 +50,44 @@ abstract class AppDatabase : RoomDatabase() {
                 db.execSQL(
                     "ALTER TABLE test_sessions ADD COLUMN videoUri TEXT"
                 )
+            }
+        }
+
+        /**
+         * Migration from version 2 to 3: Make cameraId nullable in test_sessions.
+         * SQLite doesn't support changing nullability, so we recreate the table.
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                // Create new table with nullable cameraId
+                db.execSQL("""
+                    CREATE TABLE test_sessions_new (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        cameraId INTEGER,
+                        recordingFps REAL NOT NULL,
+                        testedAt INTEGER NOT NULL,
+                        avgDeviationPercent REAL,
+                        expectedSpeedsJson TEXT NOT NULL DEFAULT '',
+                        videoUri TEXT,
+                        FOREIGN KEY(cameraId) REFERENCES cameras(id) ON DELETE CASCADE
+                    )
+                """.trimIndent())
+
+                // Copy data (convert cameraId=0 to NULL)
+                db.execSQL("""
+                    INSERT INTO test_sessions_new (id, cameraId, recordingFps, testedAt, avgDeviationPercent, expectedSpeedsJson, videoUri)
+                    SELECT id, CASE WHEN cameraId = 0 THEN NULL ELSE cameraId END, recordingFps, testedAt, avgDeviationPercent, expectedSpeedsJson, videoUri
+                    FROM test_sessions
+                """.trimIndent())
+
+                // Drop old table
+                db.execSQL("DROP TABLE test_sessions")
+
+                // Rename new table
+                db.execSQL("ALTER TABLE test_sessions_new RENAME TO test_sessions")
+
+                // Recreate index
+                db.execSQL("CREATE INDEX index_test_sessions_cameraId ON test_sessions(cameraId)")
             }
         }
     }

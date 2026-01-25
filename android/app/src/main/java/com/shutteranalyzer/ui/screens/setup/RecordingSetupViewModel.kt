@@ -142,14 +142,14 @@ class RecordingSetupViewModel @Inject constructor(
      */
     suspend fun createSession(): Long {
         // Create camera if name is provided
-        val cameraId = if (cameraName.value.isNotBlank()) {
+        val cameraId: Long? = if (cameraName.value.isNotBlank()) {
             val camera = Camera(
                 name = cameraName.value.trim(),
                 createdAt = Instant.now()
             )
             cameraRepository.saveCamera(camera)
         } else {
-            0L // No camera associated
+            null // No camera associated
         }
 
         // Create test session with expected speeds

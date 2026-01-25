@@ -176,7 +176,7 @@ fun RecordingSetupScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NEW TEST") },
+                title = { Text("NEW TEST (v2)") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(

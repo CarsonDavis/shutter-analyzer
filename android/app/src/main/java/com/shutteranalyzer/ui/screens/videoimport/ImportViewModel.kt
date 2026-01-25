@@ -187,14 +187,14 @@ class ImportViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 // Create camera if name provided
-                val cameraId = if (_cameraName.value.isNotBlank()) {
+                val cameraId: Long? = if (_cameraName.value.isNotBlank()) {
                     val camera = Camera(
                         name = _cameraName.value.trim(),
                         createdAt = Instant.now()
                     )
                     cameraRepository.saveCamera(camera)
                 } else {
-                    0L
+                    null
                 }
 
                 // Create expected speeds list in order

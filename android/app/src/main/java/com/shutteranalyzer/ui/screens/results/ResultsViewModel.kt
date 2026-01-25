@@ -129,8 +129,10 @@ class ResultsViewModel @Inject constructor(
                 _testDate.value = formatDate(loadedSession.testedAt)
 
                 // Load camera if associated
-                if (loadedSession.cameraId > 0) {
-                    _camera.value = cameraRepository.getCameraById(loadedSession.cameraId)
+                loadedSession.cameraId?.let { cameraId ->
+                    if (cameraId > 0) {
+                        _camera.value = cameraRepository.getCameraById(cameraId)
+                    }
                 }
 
                 // Calculate results from events
