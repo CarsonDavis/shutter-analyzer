@@ -181,6 +181,19 @@ Based on initial requirements gathering:
   - "Skip" (move to next without recording)
   - "Done" (finish early with partial results)
 
+**Calibration Flow** (Two-Phase):
+1. **Setup Phase**: User adjusts focus/zoom, then taps "Begin Detecting"
+2. **Baseline Phase** (0-50% progress):
+   - "Establishing baseline..." message with progress bar
+   - Collects 60 frames to determine dark baseline
+   - User holds camera steady
+3. **Calibration Shutter Phase**:
+   - "Fire Shutter Once" prompt with camera icon
+   - "(This event will not be recorded)" note
+   - User fires shutter once to calibrate detection threshold
+   - System captures peak brightness and calculates final threshold
+4. **Detection Phase**: Normal speed prompts begin (e.g., "1/1000")
+
 **Behavior**:
 - **Auto-exposure**: Camera automatically adjusts to keep baseline relatively dark (optimizes for event detection)
 - **High-speed mode**: Automatically uses device's maximum slow-motion frame rate

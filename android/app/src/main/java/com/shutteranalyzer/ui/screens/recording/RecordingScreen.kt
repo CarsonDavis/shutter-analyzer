@@ -19,10 +19,14 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.CenterFocusStrong
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.ZoomIn
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -32,6 +36,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -45,6 +50,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
@@ -84,6 +91,11 @@ fun RecordingScreen(
     val expectedSpeeds by viewModel.expectedSpeeds.collectAsStateWithLifecycle()
     val recordingFps by viewModel.recordingFps.collectAsStateWithLifecycle()
     val detectedEvents by viewModel.detectedEvents.collectAsStateWithLifecycle()
+    val zoomRatio by viewModel.zoomRatio.collectAsStateWithLifecycle()
+    val minZoomRatio by viewModel.minZoomRatio.collectAsStateWithLifecycle()
+    val maxZoomRatio by viewModel.maxZoomRatio.collectAsStateWithLifecycle()
+    val isAutoFocus by viewModel.isAutoFocus.collectAsStateWithLifecycle()
+    val focusDistance by viewModel.focusDistance.collectAsStateWithLifecycle()
 
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
@@ -98,8 +110,10 @@ fun RecordingScreen(
     }
 
     // Start recording only after camera is initialized AND preview is bound
+    // Small delay to let Camera2Interop settings stabilize before recording
     LaunchedEffect(cameraInitialized, previewBound) {
         if (cameraInitialized && previewBound) {
+            kotlinx.coroutines.delay(500) // Wait for camera to stabilize
             viewModel.startRecording()
         }
     }
@@ -126,9 +140,35 @@ fun RecordingScreen(
             is RecordingState.Initializing -> {
                 LoadingOverlay(message = "Initializing camera...")
             }
-            is RecordingState.Calibrating -> {
+            is RecordingState.SettingUp -> {
+                SettingUpOverlay(
+                    zoomRatio = zoomRatio,
+                    minZoomRatio = minZoomRatio,
+                    maxZoomRatio = maxZoomRatio,
+                    onZoomChange = viewModel::setZoom,
+                    isAutoFocus = isAutoFocus,
+                    focusDistance = focusDistance,
+                    onAutoFocusClick = {
+                        if (isAutoFocus) {
+                            viewModel.enableManualFocus()
+                        } else {
+                            viewModel.enableAutoFocus()
+                        }
+                    },
+                    onFocusChange = viewModel::setManualFocus,
+                    onBeginDetection = viewModel::beginDetection,
+                    onCancel = onCancel
+                )
+            }
+            is RecordingState.CalibratingBaseline -> {
                 CalibratingOverlay(
                     progress = calibrationProgress,
+                    message = "Establishing baseline...",
+                    onCancel = onCancel
+                )
+            }
+            is RecordingState.WaitingForCalibrationShutter -> {
+                WaitingForCalibrationShutterOverlay(
                     onCancel = onCancel
                 )
             }
@@ -139,6 +179,20 @@ fun RecordingScreen(
                     totalSpeeds = state.total,
                     fps = recordingFps,
                     brightness = currentBrightness,
+                    zoomRatio = zoomRatio,
+                    minZoomRatio = minZoomRatio,
+                    maxZoomRatio = maxZoomRatio,
+                    onZoomChange = viewModel::setZoom,
+                    isAutoFocus = isAutoFocus,
+                    focusDistance = focusDistance,
+                    onAutoFocusClick = {
+                        if (isAutoFocus) {
+                            viewModel.enableManualFocus()
+                        } else {
+                            viewModel.enableAutoFocus()
+                        }
+                    },
+                    onFocusChange = viewModel::setManualFocus,
                     onRedo = viewModel::redoLastEvent,
                     onSkip = viewModel::skipSpeed,
                     onDone = viewModel::finishEarly
@@ -151,6 +205,9 @@ fun RecordingScreen(
                     totalSpeeds = expectedSpeeds.size,
                     fps = recordingFps
                 )
+            }
+            is RecordingState.Analyzing -> {
+                AnalyzingOverlay(progress = state.progress)
             }
             is RecordingState.Complete -> {
                 // Will navigate away
@@ -217,8 +274,171 @@ private fun LoadingOverlay(message: String) {
 }
 
 @Composable
+private fun AnalyzingOverlay(progress: Float) {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.8f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            CircularProgressIndicator(
+                progress = { progress },
+                color = Color.White,
+                trackColor = Color.White.copy(alpha = 0.3f)
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
+                text = "Analyzing video...",
+                color = Color.White,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "${(progress * 100).toInt()}%",
+                color = Color.White.copy(alpha = 0.7f),
+                style = MaterialTheme.typography.bodyMedium
+            )
+        }
+    }
+}
+
+@Composable
+private fun SettingUpOverlay(
+    zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
+    onZoomChange: (Float) -> Unit,
+    isAutoFocus: Boolean,
+    focusDistance: Float,
+    onAutoFocusClick: () -> Unit,
+    onFocusChange: (Float) -> Unit,
+    onBeginDetection: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(modifier = Modifier.fillMaxSize()) {
+        // Begin Detecting button in top right (shifted left to avoid sliders)
+        Button(
+            onClick = onBeginDetection,
+            modifier = Modifier
+                .align(Alignment.TopEnd)
+                .padding(top = 16.dp, end = 100.dp)
+        ) {
+            Text("Begin Detecting")
+        }
+
+        // Cancel button in top left
+        TextButton(
+            onClick = onCancel,
+            modifier = Modifier
+                .align(Alignment.TopStart)
+                .padding(16.dp)
+        ) {
+            Text("Cancel", color = Color.White)
+        }
+
+        // Vertical sliders on the right side
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Focus slider (left of zoom)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                // Autofocus icon
+                IconButton(
+                    onClick = onAutoFocusClick,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CenterFocusStrong,
+                        contentDescription = if (isAutoFocus) "Autofocus enabled" else "Enable autofocus",
+                        tint = if (isAutoFocus) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Far",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // Vertical focus slider
+                VerticalSlider(
+                    value = focusDistance,
+                    onValueChange = onFocusChange,
+                    valueRange = 0f..1f,
+                    enabled = !isAutoFocus,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(200.dp)
+                )
+
+                Text(
+                    text = "Near",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+
+            // Zoom slider (far right)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = "Zoom control",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${maxZoomRatio.toInt()}x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // Vertical zoom slider
+                VerticalSlider(
+                    value = zoomRatio,
+                    onValueChange = onZoomChange,
+                    valueRange = minZoomRatio..maxZoomRatio,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(200.dp)
+                )
+
+                Text(
+                    text = "1x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+        }
+    }
+}
+
+@Composable
 private fun CalibratingOverlay(
     progress: Float,
+    message: String = "Calibrating...",
     onCancel: () -> Unit
 ) {
     Box(
@@ -249,7 +469,7 @@ private fun CalibratingOverlay(
                     )
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
-                        text = "Calibrating...",
+                        text = message,
                         style = MaterialTheme.typography.titleMedium,
                         color = Color.White
                     )
@@ -279,104 +499,280 @@ private fun CalibratingOverlay(
 }
 
 @Composable
+private fun WaitingForCalibrationShutterOverlay(
+    onCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black.copy(alpha = 0.8f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CameraAlt,
+                        contentDescription = "Fire calibration shutter",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(64.dp)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Text(
+                        text = "Fire Shutter Once",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "to calibrate detection threshold",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.7f),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Text(
+                        text = "(This event will not be recorded)",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.White.copy(alpha = 0.5f),
+                        textAlign = TextAlign.Center
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            TextButton(onClick = onCancel) {
+                Text("Cancel", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
 private fun WaitingForShutterOverlay(
     speed: String,
     currentIndex: Int,
     totalSpeeds: Int,
     fps: Int,
     brightness: Double,
+    zoomRatio: Float,
+    minZoomRatio: Float,
+    maxZoomRatio: Float,
+    onZoomChange: (Float) -> Unit,
+    isAutoFocus: Boolean,
+    focusDistance: Float,
+    onAutoFocusClick: () -> Unit,
+    onFocusChange: (Float) -> Unit,
     onRedo: () -> Unit,
     onSkip: () -> Unit,
     onDone: () -> Unit
 ) {
-    Column(
-        modifier = Modifier.fillMaxSize()
-    ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier.fillMaxSize()
         ) {
-            Text(
-                text = "${fps}fps",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White
-            )
-            Text(
-                text = "${currentIndex + 1} of $totalSpeeds",
-                style = MaterialTheme.typography.labelLarge,
-                color = Color.White
-            )
-        }
-
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Speed prompt
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 32.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color.Black.copy(alpha = 0.8f)
-            )
-        ) {
-            Column(
+            // Header
+            Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = speed,
-                    style = MaterialTheme.typography.displayMedium,
-                    fontWeight = FontWeight.Bold,
+                    text = "${fps}fps",
+                    style = MaterialTheme.typography.labelLarge,
                     color = Color.White
                 )
-                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Fire shutter now",
-                    style = MaterialTheme.typography.bodyLarge,
+                    text = "${currentIndex + 1} of $totalSpeeds",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = Color.White,
+                    modifier = Modifier.padding(end = 100.dp) // Leave room for sliders
+                )
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Speed prompt
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 32.dp, end = 100.dp), // Leave room for sliders
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black.copy(alpha = 0.8f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Text(
+                        text = speed,
+                        style = MaterialTheme.typography.displayMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Fire shutter now",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.7f)
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            // Bottom controls
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                OutlinedButton(
+                    onClick = onRedo,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = "Redo last measurement")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Redo")
+                }
+
+                OutlinedButton(
+                    onClick = onSkip,
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+                ) {
+                    Icon(Icons.Default.SkipNext, contentDescription = "Skip this speed")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Skip")
+                }
+
+                Button(onClick = onDone) {
+                    Icon(Icons.Default.Stop, contentDescription = "Finish recording")
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Done")
+                }
+            }
+        }
+
+        // Vertical sliders on the right side
+        Row(
+            modifier = Modifier
+                .align(Alignment.CenterEnd)
+                .padding(end = 16.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Focus slider (left of zoom)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                // Autofocus icon
+                IconButton(
+                    onClick = onAutoFocusClick,
+                    modifier = Modifier.size(44.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CenterFocusStrong,
+                        contentDescription = if (isAutoFocus) "Autofocus enabled" else "Enable autofocus",
+                        tint = if (isAutoFocus) MaterialTheme.colorScheme.primary else Color.White,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "Far",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // Vertical focus slider
+                VerticalSlider(
+                    value = focusDistance,
+                    onValueChange = onFocusChange,
+                    valueRange = 0f..1f,
+                    enabled = !isAutoFocus,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(200.dp)
+                )
+
+                Text(
+                    text = "Near",
+                    style = MaterialTheme.typography.labelSmall,
                     color = Color.White.copy(alpha = 0.7f)
                 )
             }
-        }
 
-        Spacer(modifier = Modifier.weight(1f))
-
-        // Bottom controls
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(Color.Black.copy(alpha = 0.6f))
-                .padding(16.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly
-        ) {
-            OutlinedButton(
-                onClick = onRedo,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
+            // Zoom slider (far right)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
             ) {
-                Icon(Icons.Default.Refresh, contentDescription = "Redo last measurement")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Redo")
-            }
+                Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = "Zoom control",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
 
-            OutlinedButton(
-                onClick = onSkip,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-            ) {
-                Icon(Icons.Default.SkipNext, contentDescription = "Skip this speed")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Skip")
-            }
+                Spacer(modifier = Modifier.height(4.dp))
 
-            Button(onClick = onDone) {
-                Icon(Icons.Default.Stop, contentDescription = "Finish recording")
-                Spacer(modifier = Modifier.width(4.dp))
-                Text("Done")
+                Text(
+                    text = "${maxZoomRatio.toInt()}x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // Vertical zoom slider
+                VerticalSlider(
+                    value = zoomRatio,
+                    onValueChange = onZoomChange,
+                    valueRange = minZoomRatio..maxZoomRatio,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(200.dp)
+                )
+
+                Text(
+                    text = "1x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
             }
         }
     }
@@ -514,6 +910,47 @@ private fun ErrorOverlay(
     }
 }
 
+/**
+ * A vertical slider that properly handles touch input.
+ * Uses layout rotation to display horizontally-designed Slider vertically.
+ */
+@Composable
+private fun VerticalSlider(
+    value: Float,
+    onValueChange: (Float) -> Unit,
+    valueRange: ClosedFloatingPointRange<Float>,
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
+) {
+    // We use a layout modifier to swap width and height, then rotate the content
+    Slider(
+        value = value,
+        onValueChange = onValueChange,
+        valueRange = valueRange,
+        enabled = enabled,
+        modifier = modifier
+            .graphicsLayer {
+                rotationZ = -90f
+                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0f, 0f)
+            }
+            .layout { measurable, constraints ->
+                // Swap width and height constraints
+                val placeable = measurable.measure(
+                    constraints.copy(
+                        minWidth = constraints.minHeight,
+                        maxWidth = constraints.maxHeight,
+                        minHeight = constraints.minWidth,
+                        maxHeight = constraints.maxWidth
+                    )
+                )
+                // Report swapped dimensions
+                layout(placeable.height, placeable.width) {
+                    placeable.place(-placeable.width, 0)
+                }
+            }
+    )
+}
+
 @Preview(showBackground = true, backgroundColor = 0xFF000000)
 @Composable
 private fun WaitingForShutterOverlayPreview() {
@@ -524,6 +961,14 @@ private fun WaitingForShutterOverlayPreview() {
             totalSpeeds = 11,
             fps = 240,
             brightness = 50.0,
+            zoomRatio = 1f,
+            minZoomRatio = 1f,
+            maxZoomRatio = 10f,
+            onZoomChange = {},
+            isAutoFocus = true,
+            focusDistance = 0.5f,
+            onAutoFocusClick = {},
+            onFocusChange = {},
             onRedo = {},
             onSkip = {},
             onDone = {}

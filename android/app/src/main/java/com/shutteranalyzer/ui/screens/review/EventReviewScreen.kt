@@ -1,5 +1,6 @@
 package com.shutteranalyzer.ui.screens.review
 
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -28,6 +29,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -42,6 +44,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
@@ -73,6 +77,7 @@ fun EventReviewScreen(
 ) {
     val events by viewModel.events.collectAsStateWithLifecycle()
     val currentEventIndex by viewModel.currentEventIndex.collectAsStateWithLifecycle()
+    val isLoadingThumbnails by viewModel.isLoadingThumbnails.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
 
     val currentEvent = if (events.isNotEmpty() && currentEventIndex in events.indices) {
@@ -130,6 +135,28 @@ fun EventReviewScreen(
                         .verticalScroll(rememberScrollState())
                         .padding(16.dp)
                 ) {
+                    // Show loading indicator while extracting thumbnails
+                    if (isLoadingThumbnails) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(bottom = 8.dp),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Loading thumbnails...",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
                     currentEvent?.let { event ->
                         EventReviewContent(
                             event = event,
@@ -208,73 +235,134 @@ private fun FrameThumbnail(
     frame: FrameInfo,
     onClick: () -> Unit
 ) {
-    val backgroundColor = when {
-        frame.isContext -> ContextBlue.copy(alpha = 0.3f)
-        frame.weight >= 0.95 -> AccuracyGreen.copy(alpha = 0.6f)
-        frame.weight >= 0.5 -> AccuracyOrange.copy(alpha = 0.6f)
-        else -> AccuracyYellow.copy(alpha = 0.4f)
-    }
-
     val borderColor = when {
         frame.isContext -> ContextBlue
-        frame.isIncluded -> Color.Transparent
-        else -> MaterialTheme.colorScheme.error
+        !frame.isIncluded -> MaterialTheme.colorScheme.error
+        frame.weight >= 0.95 -> AccuracyGreen
+        frame.weight >= 0.5 -> AccuracyOrange
+        else -> AccuracyYellow
+    }
+
+    val borderWidth = when {
+        frame.isContext -> 2.dp
+        !frame.isIncluded -> 3.dp
+        else -> 2.dp
     }
 
     Card(
         modifier = Modifier
-            .size(72.dp)
+            .width(80.dp)
             .then(
                 if (!frame.isContext) {
                     Modifier.clickable(onClick = onClick)
                 } else Modifier
             )
             .border(
-                width = if (!frame.isIncluded && !frame.isContext) 2.dp else 0.dp,
+                width = borderWidth,
                 color = borderColor,
                 shape = RoundedCornerShape(8.dp)
             ),
         colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
+            containerColor = MaterialTheme.colorScheme.surfaceVariant
         )
     ) {
         Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(4.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.Center
+            modifier = Modifier.fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Brightness value
-            Text(
-                text = frame.brightness.toInt().toString(),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = if (frame.isContext) ContextBlue else MaterialTheme.colorScheme.onSurface
-            )
+            // Thumbnail image or placeholder
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .aspectRatio(16f / 9f)
+                    .clip(RoundedCornerShape(topStart = 6.dp, topEnd = 6.dp)),
+                contentAlignment = Alignment.Center
+            ) {
+                if (frame.thumbnail != null) {
+                    Image(
+                        bitmap = frame.thumbnail.asImageBitmap(),
+                        contentDescription = "Frame ${frame.frameNumber}",
+                        modifier = Modifier.fillMaxSize(),
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    // Placeholder while loading or if no thumbnail
+                    val placeholderColor = when {
+                        frame.isContext -> ContextBlue.copy(alpha = 0.3f)
+                        frame.weight >= 0.95 -> AccuracyGreen.copy(alpha = 0.4f)
+                        frame.weight >= 0.5 -> AccuracyOrange.copy(alpha = 0.4f)
+                        else -> AccuracyYellow.copy(alpha = 0.3f)
+                    }
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(placeholderColor),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "...",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
 
-            Spacer(modifier = Modifier.height(4.dp))
+                // Excluded overlay
+                if (!frame.isIncluded && !frame.isContext) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.5f)),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Text(
+                            text = "✕",
+                            style = MaterialTheme.typography.titleLarge,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
 
-            // Status indicator
-            if (frame.isContext) {
+            // Info bar below thumbnail
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(
+                        when {
+                            frame.isContext -> ContextBlue.copy(alpha = 0.2f)
+                            frame.weight >= 0.95 -> AccuracyGreen.copy(alpha = 0.2f)
+                            frame.weight >= 0.5 -> AccuracyOrange.copy(alpha = 0.2f)
+                            else -> AccuracyYellow.copy(alpha = 0.2f)
+                        }
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Frame number
                 Text(
-                    text = "ctx",
+                    text = "#${frame.frameNumber}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = ContextBlue
+                    color = if (frame.isContext) ContextBlue else MaterialTheme.colorScheme.onSurface
                 )
-            } else if (frame.isIncluded) {
-                Icon(
-                    imageVector = Icons.Default.Check,
-                    contentDescription = "Included",
-                    modifier = Modifier.size(16.dp),
-                    tint = AccuracyGreen
-                )
-            } else {
-                Text(
-                    text = "excluded",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.error
-                )
+
+                // Brightness or context label
+                if (frame.isContext) {
+                    Text(
+                        text = "ctx",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = ContextBlue
+                    )
+                } else {
+                    Text(
+                        text = "${frame.brightness.toInt()}",
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
     }
@@ -400,19 +488,19 @@ private fun FrameThumbnailPreview() {
             horizontalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             FrameThumbnail(
-                frame = FrameInfo(100, 15.0, false, 0.0, isContext = true),
+                frame = FrameInfo(100, 15.0, false, 0.0, isContext = true, thumbnail = null),
                 onClick = {}
             )
             FrameThumbnail(
-                frame = FrameInfo(101, 180.0, true, 0.8, isContext = false),
+                frame = FrameInfo(101, 180.0, true, 0.8, isContext = false, thumbnail = null),
                 onClick = {}
             )
             FrameThumbnail(
-                frame = FrameInfo(102, 240.0, true, 1.0, isContext = false),
+                frame = FrameInfo(102, 240.0, true, 1.0, isContext = false, thumbnail = null),
                 onClick = {}
             )
             FrameThumbnail(
-                frame = FrameInfo(103, 95.0, false, 0.4, isContext = false),
+                frame = FrameInfo(103, 95.0, false, 0.4, isContext = false, thumbnail = null),
                 onClick = {}
             )
         }

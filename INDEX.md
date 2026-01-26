@@ -64,7 +64,8 @@ shutter-analyzer/
 │           │   ├── data/                      # Data layer
 │           │   │   ├── local/database/        # Room entities, DAOs, AppDatabase (Phase 2)
 │           │   │   ├── repository/            # Repositories (Phase 2)
-│           │   │   └── camera/                # CameraX + live detection (Phase 3)
+│           │   │   ├── camera/                # CameraX + live detection (Phase 3)
+│           │   │   └── video/                 # Video utilities (VideoAnalyzer, FrameExtractor)
 │           │   ├── domain/model/              # Domain models (Phase 2)
 │           │   ├── di/                        # Hilt DI modules
 │           │   └── ui/                        # UI layer (Phase 4, 5, 6, 7)

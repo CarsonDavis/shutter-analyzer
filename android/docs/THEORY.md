@@ -199,6 +199,60 @@ For vintage cameras, accuracy within 10-20% of marked speed is often acceptable.
 
 ---
 
+## Two-Phase Calibration (Live Detection)
+
+The Android app uses a two-phase calibration process for real-time event detection.
+
+### Phase 1: Baseline Establishment
+
+The app collects 60 frames with the shutter closed to establish baseline brightness:
+
+```
+baseline = 25th percentile of brightness values
+maxNoise = max brightness seen during calibration
+stdDev = standard deviation of brightness values
+```
+
+A preliminary threshold is calculated to detect the calibration shutter event:
+
+```
+preliminaryThreshold = max(
+    baseline + stdDev × 5,    // 5-sigma statistical outlier
+    baseline + 50,            // Absolute minimum increase
+    maxNoise × 2              // 2x the brightest noise
+)
+```
+
+This robust threshold prevents false triggers from shadows and ambient lighting changes.
+
+### Phase 2: Calibration Shutter
+
+The user fires the shutter once for calibration:
+- This event is **discarded** and does not count toward measurements
+- The app captures the peak brightness during this event
+- Final threshold is calculated based on actual measured brightness range
+
+```
+peak = max brightness during calibration event
+threshold = baseline + (peak - baseline) × 0.8
+```
+
+### Why 80% Factor?
+
+Setting the threshold at 80% of the brightness range provides:
+- Margin for variation between shutter events
+- Tolerance for slightly dimmer events (different angles, lighting)
+- Rejection of noise that doesn't reach near-peak brightness
+
+### Threshold Formula Comparison
+
+| Method | Formula | Context |
+|--------|---------|---------|
+| Old (dark frames only) | `baseline + (median - baseline) × 1.5` | Guessed peak from noise |
+| New (with calibration) | `baseline + (peak - baseline) × 0.8` | Uses actual measured peak |
+
+---
+
 ## Threshold Detection Methods
 
 ### Original Method (Percentile-based)

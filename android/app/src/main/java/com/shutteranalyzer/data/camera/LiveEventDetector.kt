@@ -2,13 +2,25 @@ package com.shutteranalyzer.data.camera
 
 import com.shutteranalyzer.analysis.model.median
 import com.shutteranalyzer.analysis.model.percentile
+import com.shutteranalyzer.analysis.model.stdDev
 
 /**
  * State of the live event detector.
+ *
+ * Two-phase calibration flow:
+ * CalibratingBaseline → WaitingForCalibrationShutter → CapturingCalibrationEvent → WaitingForEvent → EventInProgress
  */
 sealed class DetectorState {
-    /** Collecting calibration frames to determine threshold */
-    object Calibrating : DetectorState()
+    /** Phase 1: Collecting baseline frames (dark, shutter closed) */
+    object CalibratingBaseline : DetectorState()
+
+    /** Phase 2: Baseline established, waiting for user to fire calibration shutter */
+    object WaitingForCalibrationShutter : DetectorState()
+
+    /** Phase 2b: Calibration shutter fired, capturing peak brightness */
+    data class CapturingCalibrationEvent(
+        val brightnessValues: MutableList<Double> = mutableListOf()
+    ) : DetectorState()
 
     /** Calibration complete, waiting for brightness to exceed threshold */
     object WaitingForEvent : DetectorState()
@@ -24,7 +36,10 @@ sealed class DetectorState {
  * Result of processing a frame.
  */
 sealed class EventResult {
-    /** Calibration just completed */
+    /** Phase 1 complete: baseline established, waiting for calibration shutter */
+    object BaselineCalibrationComplete : EventResult()
+
+    /** Full calibration complete: ready to detect actual events */
     object CalibrationComplete : EventResult()
 
     /** An event was detected (shutter opened and closed) */
@@ -36,59 +51,89 @@ sealed class EventResult {
 }
 
 /**
- * Real-time event detector for live camera feed.
+ * Real-time event detector for live camera feed with two-phase calibration.
  *
- * Processes frames as they come in, detects when brightness exceeds
- * a dynamically calculated threshold, and reports events.
+ * Two-phase calibration:
+ * 1. Baseline phase: Collect dark frames to establish baseline brightness
+ * 2. Calibration shutter: User fires shutter once to capture peak brightness
+ *    - This event is DISCARDED and not counted
+ *    - Final threshold = baseline + (peak - baseline) * 0.8
  *
  * Usage:
  * 1. Create detector
  * 2. Call processFrame() for each camera frame
- * 3. Handle EventResult when returned (calibration complete or event detected)
- * 4. Call reset() to start over
+ * 3. Handle EventResult.BaselineCalibrationComplete → prompt user to fire calibration shutter
+ * 4. Handle EventResult.CalibrationComplete → start prompting for actual speeds
+ * 5. Handle EventResult.EventDetected → record actual events
+ * 6. Call reset() to start over
  */
 class LiveEventDetector {
 
-    private var state: DetectorState = DetectorState.Calibrating
+    private var state: DetectorState = DetectorState.CalibratingBaseline
     private val calibrationFrames = mutableListOf<Double>()
 
+    // Baseline calibration results
     private var baseline: Double = 0.0
+    private var maxSeenDuringBaseline: Double = 0.0
+    private var baselineStdDev: Double = 0.0
+    private var preliminaryThreshold: Double = 0.0
+
+    // Calibration event results
+    private var calibrationPeak: Double = 0.0
     private var threshold: Double = 0.0
 
     private var eventCount = 0
 
     /**
-     * Number of frames to collect during calibration.
+     * Number of frames to collect during baseline calibration.
      * At 60fps, this is ~1 second. At 120fps, ~0.5 seconds.
      */
     var calibrationFrameCount: Int = CALIBRATION_FRAME_COUNT
 
     /**
-     * Margin factor for threshold calculation.
-     * threshold = baseline + (median - baseline) * marginFactor
+     * Factor for final threshold calculation.
+     * threshold = baseline + (peak - baseline) * thresholdFactor
      */
-    var marginFactor: Double = DEFAULT_MARGIN_FACTOR
+    var thresholdFactor: Double = DEFAULT_THRESHOLD_FACTOR
 
     /**
-     * Whether the detector is currently calibrating.
+     * Whether the detector is in baseline calibration phase.
      */
-    val isCalibrating: Boolean
-        get() = state is DetectorState.Calibrating
+    val isCalibratingBaseline: Boolean
+        get() = state is DetectorState.CalibratingBaseline
 
     /**
-     * Whether the detector has completed calibration.
+     * Whether the detector is waiting for calibration shutter.
+     */
+    val isWaitingForCalibrationShutter: Boolean
+        get() = state is DetectorState.WaitingForCalibrationShutter
+
+    /**
+     * Whether the detector is capturing calibration event.
+     */
+    val isCapturingCalibrationEvent: Boolean
+        get() = state is DetectorState.CapturingCalibrationEvent
+
+    /**
+     * Whether the detector has completed full calibration (both phases).
      */
     val isCalibrated: Boolean
-        get() = state !is DetectorState.Calibrating
+        get() = state is DetectorState.WaitingForEvent || state is DetectorState.EventInProgress
 
     /**
      * Progress of calibration (0.0 to 1.0).
+     * Baseline phase: 0.0 to 0.5
+     * Waiting for calibration shutter: 0.5
+     * Capturing calibration event: 0.75
+     * Complete: 1.0
      */
     val calibrationProgress: Float
-        get() = if (state is DetectorState.Calibrating) {
-            calibrationFrames.size.toFloat() / calibrationFrameCount
-        } else {
-            1.0f
+        get() = when (state) {
+            is DetectorState.CalibratingBaseline ->
+                calibrationFrames.size.toFloat() / calibrationFrameCount * 0.5f
+            is DetectorState.WaitingForCalibrationShutter -> 0.5f
+            is DetectorState.CapturingCalibrationEvent -> 0.75f
+            else -> 1.0f
         }
 
     /**
@@ -98,19 +143,26 @@ class LiveEventDetector {
         get() = state is DetectorState.EventInProgress
 
     /**
-     * Current baseline brightness (after calibration).
+     * Current baseline brightness (after baseline calibration).
      */
     val currentBaseline: Double
         get() = baseline
 
     /**
-     * Current threshold (after calibration).
+     * Current threshold (after full calibration).
      */
     val currentThreshold: Double
         get() = threshold
 
     /**
+     * Peak brightness from calibration event.
+     */
+    val currentPeak: Double
+        get() = calibrationPeak
+
+    /**
      * Number of events detected since last reset.
+     * Note: The calibration shutter event is NOT counted.
      */
     val detectedEventCount: Int
         get() = eventCount
@@ -120,24 +172,48 @@ class LiveEventDetector {
      *
      * @param brightness Brightness value of the frame (0-255)
      * @param timestamp Timestamp of the frame in nanoseconds
-     * @return EventResult if calibration completed or event detected, null otherwise
+     * @return EventResult if state changed, null otherwise
      */
     fun processFrame(brightness: Double, timestamp: Long): EventResult? {
         return when (val currentState = state) {
-            is DetectorState.Calibrating -> {
+            is DetectorState.CalibratingBaseline -> {
                 calibrationFrames.add(brightness)
                 if (calibrationFrames.size >= calibrationFrameCount) {
-                    finishCalibration()
-                    state = DetectorState.WaitingForEvent
-                    EventResult.CalibrationComplete
+                    finishBaselineCalibration()
+                    state = DetectorState.WaitingForCalibrationShutter
+                    EventResult.BaselineCalibrationComplete
                 } else {
                     null
                 }
             }
 
+            is DetectorState.WaitingForCalibrationShutter -> {
+                if (brightness > preliminaryThreshold) {
+                    // Calibration shutter fired - start capturing
+                    state = DetectorState.CapturingCalibrationEvent(
+                        brightnessValues = mutableListOf(brightness)
+                    )
+                }
+                null
+            }
+
+            is DetectorState.CapturingCalibrationEvent -> {
+                if (brightness > preliminaryThreshold) {
+                    // Still in calibration event
+                    currentState.brightnessValues.add(brightness)
+                    null
+                } else {
+                    // Calibration event ended - calculate final threshold
+                    finishCalibrationEvent(currentState.brightnessValues)
+                    state = DetectorState.WaitingForEvent
+                    // Note: We do NOT increment eventCount - calibration event is discarded
+                    EventResult.CalibrationComplete
+                }
+            }
+
             is DetectorState.WaitingForEvent -> {
                 if (brightness > threshold) {
-                    // Event started
+                    // Actual event started
                     state = DetectorState.EventInProgress(
                         startTimestamp = timestamp,
                         brightnessValues = mutableListOf(brightness)
@@ -170,9 +246,13 @@ class LiveEventDetector {
      * Clears calibration and event history.
      */
     fun reset() {
-        state = DetectorState.Calibrating
+        state = DetectorState.CalibratingBaseline
         calibrationFrames.clear()
         baseline = 0.0
+        maxSeenDuringBaseline = 0.0
+        baselineStdDev = 0.0
+        preliminaryThreshold = 0.0
+        calibrationPeak = 0.0
         threshold = 0.0
         eventCount = 0
     }
@@ -188,35 +268,68 @@ class LiveEventDetector {
         }
     }
 
-    private fun finishCalibration() {
+    /**
+     * Finish baseline calibration (Phase 1).
+     * Calculates baseline and preliminary threshold for detecting calibration shutter.
+     */
+    private fun finishBaselineCalibration() {
         if (calibrationFrames.isEmpty()) {
             baseline = 0.0
-            threshold = 50.0 // Default threshold
+            preliminaryThreshold = MIN_BRIGHTNESS_INCREASE
             return
         }
 
-        // Calculate baseline as 25th percentile
+        // Calculate baseline statistics
         baseline = calibrationFrames.percentile(25)
+        maxSeenDuringBaseline = calibrationFrames.maxOrNull() ?: baseline
+        baselineStdDev = calibrationFrames.stdDev()
 
-        // Calculate threshold
-        val median = calibrationFrames.median()
-        val brightnessRange = median - baseline
-        threshold = baseline + (brightnessRange * marginFactor)
-
-        // Ensure threshold is not exactly baseline (for uniform brightness)
-        if (threshold <= baseline) {
-            val max = calibrationFrames.maxOrNull() ?: baseline
-            threshold = baseline + (max - baseline) * 0.1
-        }
+        // Calculate preliminary threshold - must be robust to ambient noise
+        // Use the maximum of three approaches to avoid false triggers:
+        // 1. Statistical: 5 standard deviations above baseline
+        // 2. Absolute: minimum brightness increase
+        // 3. Adaptive: 2x the brightest noise seen during baseline
+        preliminaryThreshold = maxOf(
+            baseline + baselineStdDev * STDDEV_MULTIPLIER,
+            baseline + MIN_BRIGHTNESS_INCREASE,
+            maxSeenDuringBaseline * NOISE_MULTIPLIER
+        )
 
         calibrationFrames.clear()
     }
 
+    /**
+     * Finish calibration event capture (Phase 2).
+     * Calculates final threshold based on actual peak brightness.
+     */
+    private fun finishCalibrationEvent(brightnessValues: List<Double>) {
+        if (brightnessValues.isEmpty()) {
+            // Fallback if somehow empty
+            calibrationPeak = preliminaryThreshold * 2
+        } else {
+            // Use maximum brightness as peak
+            calibrationPeak = brightnessValues.maxOrNull() ?: preliminaryThreshold * 2
+        }
+
+        // Final threshold: 80% of the way from baseline to peak
+        // Events must exceed this to be detected
+        threshold = baseline + (calibrationPeak - baseline) * thresholdFactor
+    }
+
     companion object {
-        /** Default number of frames for calibration */
+        /** Default number of frames for baseline calibration */
         const val CALIBRATION_FRAME_COUNT = 60
 
-        /** Default margin factor for threshold */
-        const val DEFAULT_MARGIN_FACTOR = 1.5
+        /** Default threshold factor (80% of brightness range) */
+        const val DEFAULT_THRESHOLD_FACTOR = 0.8
+
+        /** Minimum brightness increase to trigger calibration event detection */
+        const val MIN_BRIGHTNESS_INCREASE = 50.0
+
+        /** Multiplier for max seen during baseline (for preliminary threshold) */
+        const val NOISE_MULTIPLIER = 2.0
+
+        /** Standard deviation multiplier (for preliminary threshold) */
+        const val STDDEV_MULTIPLIER = 5.0
     }
 }

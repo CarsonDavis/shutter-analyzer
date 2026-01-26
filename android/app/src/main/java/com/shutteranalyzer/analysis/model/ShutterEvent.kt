@@ -16,7 +16,9 @@ data class ShutterEvent(
     val endFrame: Int,
     val brightnessValues: List<Double>,
     val baselineBrightness: Double? = null,
-    val peakBrightness: Double? = null
+    val peakBrightness: Double? = null,
+    val expectedSpeed: String? = null,
+    val measuredSpeed: Double? = null
 ) {
     /**
      * Calculate the duration of the event in frames.

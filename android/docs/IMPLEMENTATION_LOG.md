@@ -1230,6 +1230,283 @@ Fixed all bugs identified in a comprehensive code audit, addressing CRITICAL, HI
 - [ ] Permission denied: Deny camera → shows dialog with Settings button
 
 ### Next Steps
+- Phase 7 Part 3: Camera Control Enhancements ✅
+
+---
+
+## 2025-01-25 - Phase 7 Part 3: Camera Control Enhancements
+
+### Overview
+Added camera zoom and manual focus controls to the recording screen, giving users fine-grained control over framing and focus during shutter detection.
+
+### Features Added
+
+#### 1. Camera Zoom Control
+- **Added**: Vertical zoom slider on the right side of the recording screen
+- **Range**: 1x to maximum device zoom (typically 8x-10x)
+- **Implementation**: Uses CameraX `CameraControl.setZoomRatio()`
+- **Files**: `ShutterCameraManager.kt`, `RecordingViewModel.kt`, `RecordingScreen.kt`
+
+#### 2. Manual Focus Control
+- **Added**: Vertical focus slider with autofocus toggle icon
+- **Range**: Near (0) to Infinity (1)
+- **Autofocus toggle**: Click the focus icon to enable autofocus
+- **Implementation**: Uses CameraX `CameraControl.cancelFocusAndMetering()` to disable continuous AF
+- **Files**: `ShutterCameraManager.kt`, `RecordingViewModel.kt`, `RecordingScreen.kt`
+
+#### 3. Setup Phase Before Detection
+- **Added**: `RecordingState.SettingUp` state
+- **Flow**: Recording starts → SettingUp phase → User adjusts zoom/focus → "Begin Detecting" → Calibration
+- **Benefit**: Users can frame and focus before detection begins
+
+### UI Layout
+- Vertical sliders on the right edge of the screen
+- Zoom slider on far right with ZoomIn icon
+- Focus slider to the left of zoom with CenterFocusStrong icon (autofocus toggle)
+- "Begin Detecting" button positioned to avoid overlapping sliders
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `ShutterCameraManager.kt` | Added zoom state (`zoomRatio`, `minZoomRatio`, `maxZoomRatio`), focus state (`isAutoFocus`, `focusDistance`), `setZoom()`, `enableAutoFocus()`, `setManualFocus()` |
+| `RecordingViewModel.kt` | Added `RecordingState.SettingUp`, exposed zoom/focus controls, added `beginDetection()` |
+| `RecordingScreen.kt` | Added vertical sliders in `SettingUpOverlay` and `WaitingForShutterOverlay`, imported `ZoomIn`, `IconButton`, `rotate` |
+
+### Next Steps
+- Event Review Thumbnails ✅
+
+---
+
+## 2025-01-25 - Event Review: Frame Thumbnails
+
+### Overview
+Added actual video frame thumbnails to the Event Review screen, allowing users to visually verify shutter open/close events instead of only seeing colored boxes with brightness numbers.
+
+### Changes Made
+
+#### New File: `data/video/FrameExtractor.kt`
+- Extracts frame thumbnails from video at specific frame numbers
+- Uses `MediaMetadataRetriever` for frame extraction
+- `extractFrame()` - single frame extraction
+- `extractFrames()` - batch extraction with single retriever instance for efficiency
+- Scales frames to configurable thumbnail width (default 160px)
+
+#### Updated: `ui/screens/review/EventReviewViewModel.kt`
+- Added `FrameExtractor` injection
+- Added `isLoadingThumbnails: StateFlow<Boolean>` for loading state
+- Added `extractThumbnails()` method to load all frame images in background
+- Updated `createReviewEvent()` to accept and use thumbnail map
+- Thumbnails loaded on IO dispatcher, UI updated on Main
+
+#### Updated: `ui/screens/review/EventReviewScreen.kt`
+- Added loading indicator while thumbnails are being extracted
+- Updated `FrameThumbnail` composable:
+  - Shows actual frame image when available
+  - Maintains color-coded border (green=full, orange=partial, blue=context)
+  - Shows placeholder with "..." while loading
+  - Displays frame number and brightness in info bar below image
+  - Excluded frames show dark overlay with "✕"
+  - Increased thumbnail width to 80dp for better visibility
+
+#### Updated: `FrameInfo` data class
+- Added `thumbnail: Bitmap? = null` field
+
+### UI Layout
+
+```
+┌──────────────────────────────────────────────────────┐
+│ ← REVIEW EVENTS                          1 of 5     │
+├──────────────────────────────────────────────────────┤
+│                                                      │
+│ EVENT 1: 1/500                                       │
+│ Tap frames to adjust boundary                        │
+│                                                      │
+│ ┌────────┐ ┌────────┐ ┌────────┐ ┌────────┐         │
+│ │ [img]  │ │ [img]  │ │ [img]  │ │ [img]  │ ...     │
+│ │        │ │        │ │        │ │        │         │
+│ ├────────┤ ├────────┤ ├────────┤ ├────────┤         │
+│ │#98 ctx │ │#99 ctx │ │#100 245│ │#101 252│         │
+│ └────────┘ └────────┘ └────────┘ └────────┘         │
+│   (blue)    (blue)    (green)    (green)            │
+│                                                      │
+│ Legend: [■] Full  [■] Partial  [■] Context          │
+│                                                      │
+├──────────────────────────────────────────────────────┤
+│        [◀ Prev]    1 / 5    [Next ▶]                │
+│        [ CONFIRM & CALCULATE ]                       │
+└──────────────────────────────────────────────────────┘
+```
+
+### Files Modified Summary
+
+| File | Change Type |
+|------|-------------|
+| `data/video/FrameExtractor.kt` | **NEW** - Frame extraction utility |
+| `ui/screens/review/EventReviewViewModel.kt` | Add thumbnail loading |
+| `ui/screens/review/EventReviewScreen.kt` | Display actual frame images |
+
+### Next Steps
+- Two-Phase Calibration ✅
+
+---
+
+## 2025-01-25 - Two-Phase Calibration with Peak Detection
+
+### Overview
+Improved the calibration system to use a two-phase approach that captures actual peak brightness from a calibration shutter event, resulting in more reliable threshold detection across different lighting conditions.
+
+### Problem
+The previous calibration calculated the threshold from dark frames only:
+```
+threshold = baseline + (median - baseline) * 1.5
+```
+This guessed what "bright" would look like without ever seeing an actual shutter event, leading to:
+- Potential false triggers in bright ambient conditions
+- Missed events if actual brightness was different than expected
+
+### Solution
+Two-phase calibration that captures the actual brightness range:
+
+**Phase 1 - Baseline Establishment:**
+- Collect 60 dark frames (shutter closed)
+- Calculate baseline = 25th percentile
+- Calculate preliminary threshold using robust noise detection:
+  ```
+  preliminaryThreshold = max(
+      baseline + stdDev * 5,    // 5-sigma statistical outlier
+      baseline + 50,            // Absolute minimum increase
+      maxSeenDuringBaseline * 2 // 2x the brightest noise
+  )
+  ```
+
+**Phase 2 - Calibration Shutter:**
+- User fires shutter once to calibrate
+- System captures peak brightness during this event
+- Calculate final threshold:
+  ```
+  threshold = baseline + (peak - baseline) * 0.8
+  ```
+- **This event is discarded** - not counted toward measurements
+
+### Files Modified
+
+| File | Changes |
+|------|---------|
+| `data/camera/LiveEventDetector.kt` | New state machine: CalibratingBaseline → WaitingForCalibrationShutter → CapturingCalibrationEvent → WaitingForEvent → EventInProgress. New properties: preliminaryThreshold, calibrationPeak, maxSeenDuringBaseline, baselineStdDev. New EventResult.BaselineCalibrationComplete. |
+| `data/camera/FrameAnalyzer.kt` | Added onBaselineCalibrationComplete callback, isWaitingForCalibrationShutter property, updated calibration progress handling |
+| `data/camera/ShutterCameraManager.kt` | Added isWaitingForCalibrationShutter StateFlow, updated callbacks for two-phase flow |
+| `ui/screens/recording/RecordingViewModel.kt` | Added RecordingState.CalibratingBaseline and WaitingForCalibrationShutter, updated observeCalibration() for two-phase transitions |
+| `ui/screens/recording/RecordingScreen.kt` | Added WaitingForCalibrationShutterOverlay with "Fire Shutter Once" prompt, updated CalibratingOverlay to accept message parameter |
+| `android/docs/THEORY.md` | Added "Two-Phase Calibration" section explaining the approach |
+| `android/docs/APP_SPEC.md` | Updated Recording Screen to document calibration flow |
+
+### New State Machine
+
+```
+OLD:  Calibrating → WaitingForEvent → EventInProgress → (loop)
+
+NEW:  CalibratingBaseline → WaitingForCalibrationShutter → CapturingCalibrationEvent
+      → WaitingForEvent → EventInProgress → (loop)
+```
+
+### UI Flow
+
+1. User taps "Begin Detecting"
+2. **CalibratingBaseline** state: "Establishing baseline..." with progress bar (0-50%)
+3. **WaitingForCalibrationShutter** state: "Fire Shutter Once" prompt with camera icon and note "(This event will not be recorded)"
+4. User fires calibration shutter → system captures peak
+5. **WaitingForShutter** state: Normal speed prompts begin (e.g., "1/1000")
+
+### Key Constants
+
+| Constant | Value | Purpose |
+|----------|-------|---------|
+| `CALIBRATION_FRAME_COUNT` | 60 | Frames for baseline |
+| `MIN_BRIGHTNESS_INCREASE` | 50 | Minimum brightness above baseline |
+| `NOISE_MULTIPLIER` | 2.0 | maxNoise × 2 = preliminary threshold floor |
+| `STDDEV_MULTIPLIER` | 5.0 | baseline + 5σ = statistical threshold |
+| `DEFAULT_THRESHOLD_FACTOR` | 0.8 | Final threshold = 80% of brightness range |
+
+### Benefits
+- Threshold based on actual measured brightness range
+- Works reliably across different lighting conditions
+- Robust preliminary threshold prevents false triggers from shadows/movement
+- Calibration event discarded - doesn't pollute measurements
+
+### Next Steps
+- Frame Index Alignment Fix ✅
+
+---
+
+## 2025-01-25 - Frame Index Alignment Fix
+
+### Overview
+Fixed a bug causing frame index misalignment between live detection timestamps and video frame positions. The issue caused event review thumbnails to show wrong frames (offset by the duration of the SettingUp phase).
+
+### Root Cause
+When `beginDetection()` was called, it triggered `resetCalibration()` → `frameAnalyzer.reset()` which cleared `firstFrameTimestamp` to 0L. This caused the frame index reference point to shift from the recording start time (T0) to the calibration start time (T1).
+
+**Call chain:**
+```
+beginDetection()
+  → cameraManager.resetCalibration() [ShutterCameraManager.kt:425]
+    → frameAnalyzer.reset() [ShutterCameraManager.kt:426]
+      → firstFrameTimestamp = 0L  // BUG!
+```
+
+**Result:** Frame indices were offset by the duration of the SettingUp phase (zoom/focus adjustment time).
+
+### Fix Applied
+
+#### 1. `FrameAnalyzer.kt`
+Separated timestamp management from calibration reset:
+
+```kotlin
+// reset() - for recalibration (does NOT reset timestamp)
+fun reset() {
+    liveEventDetector.reset()
+    // DO NOT reset firstFrameTimestamp here
+}
+
+// resetForNewRecording() - for starting a new recording session
+fun resetForNewRecording() {
+    liveEventDetector.reset()
+    firstFrameTimestamp = 0L
+    hasFirstFrameTimestamp = false
+}
+
+// resetEvents() - clear events, keep calibration and timestamp
+fun resetEvents() {
+    liveEventDetector.resetEvents()
+    // DO NOT reset firstFrameTimestamp
+}
+```
+
+#### 2. `ShutterCameraManager.kt`
+- `startRecording()` now calls `frameAnalyzer.resetForNewRecording()` instead of `resetEvents()`
+- `resetCalibration()` continues calling `frameAnalyzer.reset()` (no timestamp reset)
+
+#### 3. `RecordingViewModel.kt`
+- Removed video re-analysis step (`analyzeRecordedVideo()`)
+- Events are now saved directly from live detection via `saveLiveDetectedEvents()`
+- Removed unused `videoAnalyzer` dependency
+
+### Files Modified
+
+| File | Change |
+|------|--------|
+| `FrameAnalyzer.kt` | Don't reset timestamp in `reset()` and `resetEvents()`, add `resetForNewRecording()` |
+| `ShutterCameraManager.kt` | Call `resetForNewRecording()` in `startRecording()` |
+| `RecordingViewModel.kt` | Remove video re-analysis, use live detection directly, remove unused imports |
+
+### Verification
+1. Record a session with SettingUp phase (adjust zoom/focus)
+2. Go to Review screen
+3. Thumbnails should now show actual bright frames at the correct positions
+4. No offset - frame indices correctly reference recording start time
+
+### Next Steps
 - Phase 8: Publishing
 
 ---

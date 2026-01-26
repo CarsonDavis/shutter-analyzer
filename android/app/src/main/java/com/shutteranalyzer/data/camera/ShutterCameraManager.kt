@@ -2,9 +2,18 @@ package com.shutteranalyzer.data.camera
 
 import android.content.ContentValues
 import android.content.Context
+import android.hardware.camera2.CameraCharacteristics
+import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureRequest
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import androidx.camera.camera2.interop.Camera2CameraControl
+import androidx.camera.camera2.interop.Camera2CameraInfo
+import androidx.camera.camera2.interop.Camera2Interop
+import androidx.camera.camera2.interop.CaptureRequestOptions
+import androidx.camera.camera2.interop.ExperimentalCamera2Interop
+import androidx.camera.core.Camera
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.Preview
@@ -55,6 +64,14 @@ sealed class CameraState {
 }
 
 /**
+ * Focus mode for the camera.
+ */
+enum class FocusMode {
+    AUTO,
+    MANUAL
+}
+
+/**
  * Manages CameraX for preview, video recording, and real-time frame analysis.
  */
 @Singleton
@@ -63,12 +80,43 @@ class ShutterCameraManager @Inject constructor(
     private val frameAnalyzer: FrameAnalyzer
 ) {
     private var cameraProvider: ProcessCameraProvider? = null
+    private var camera: Camera? = null
     @Volatile private var videoCapture: VideoCapture<Recorder>? = null
     @Volatile private var recording: Recording? = null
     @Volatile private var imageAnalysis: ImageAnalysis? = null
     private var preview: Preview? = null
 
     private val cameraExecutor: ExecutorService = Executors.newSingleThreadExecutor()
+
+    // Store for rebinding when focus mode changes
+    private var currentLifecycleOwner: LifecycleOwner? = null
+    private var currentPreviewView: PreviewView? = null
+    private var currentFocusMode: FocusMode = FocusMode.AUTO
+
+    // Minimum focus distance from camera characteristics (in diopters)
+    private var minFocusDistance: Float = 0f
+
+    // Zoom state - uses CameraX native zoom
+    private val _zoomRatio = MutableStateFlow(1f)
+    val zoomRatio: StateFlow<Float> = _zoomRatio.asStateFlow()
+
+    private val _minZoomRatio = MutableStateFlow(1f)
+    val minZoomRatio: StateFlow<Float> = _minZoomRatio.asStateFlow()
+
+    private val _maxZoomRatio = MutableStateFlow(MAX_DIGITAL_ZOOM)
+    val maxZoomRatio: StateFlow<Float> = _maxZoomRatio.asStateFlow()
+
+    companion object {
+        // Maximum digital zoom ratio
+        const val MAX_DIGITAL_ZOOM = 4f
+    }
+
+    // Focus state
+    private val _isAutoFocus = MutableStateFlow(true)
+    val isAutoFocus: StateFlow<Boolean> = _isAutoFocus.asStateFlow()
+
+    private val _focusDistance = MutableStateFlow(0.5f) // Start at middle
+    val focusDistance: StateFlow<Float> = _focusDistance.asStateFlow()
 
     // State flows
     private val _cameraState = MutableStateFlow<CameraState>(CameraState.Uninitialized)
@@ -86,11 +134,13 @@ class ShutterCameraManager @Inject constructor(
     private val _calibrationProgress = MutableStateFlow(0f)
     val calibrationProgress: StateFlow<Float> = _calibrationProgress.asStateFlow()
 
+    private val _isWaitingForCalibrationShutter = MutableStateFlow(false)
+    val isWaitingForCalibrationShutter: StateFlow<Boolean> = _isWaitingForCalibrationShutter.asStateFlow()
+
     private val _isCalibrated = MutableStateFlow(false)
     val isCalibrated: StateFlow<Boolean> = _isCalibrated.asStateFlow()
 
     private var eventIndex = 0
-    private var recordingStartTimestamp: Long = 0L
 
     init {
         setupFrameAnalyzerCallbacks()
@@ -105,7 +155,14 @@ class ShutterCameraManager @Inject constructor(
             _calibrationProgress.value = progress
         }
 
+        frameAnalyzer.onBaselineCalibrationComplete = { _ ->
+            // Phase 1 complete - waiting for user to fire calibration shutter
+            _isWaitingForCalibrationShutter.value = true
+        }
+
         frameAnalyzer.onCalibrationComplete = { _, _ ->
+            // Phase 2 complete - full calibration done, ready to detect
+            _isWaitingForCalibrationShutter.value = false
             _isCalibrated.value = true
         }
 
@@ -165,35 +222,51 @@ class ShutterCameraManager @Inject constructor(
     /**
      * Bind camera preview and analysis to a lifecycle owner.
      *
+     * Focus mode must be set at bind time using Camera2Interop.Extender because
+     * CameraX overrides AF settings applied dynamically via Camera2CameraControl.
+     *
      * @param lifecycleOwner Lifecycle owner (typically an Activity or Fragment)
      * @param previewView PreviewView to display camera preview
+     * @param focusMode Focus mode to use (AUTO or MANUAL)
      */
-    fun bindPreview(lifecycleOwner: LifecycleOwner, previewView: PreviewView) {
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    fun bindPreview(
+        lifecycleOwner: LifecycleOwner,
+        previewView: PreviewView,
+        focusMode: FocusMode = FocusMode.AUTO
+    ) {
         val provider = cameraProvider ?: run {
             _cameraState.value = CameraState.Error("Camera not initialized")
             return
         }
 
+        // Store for rebinding when focus mode changes
+        currentLifecycleOwner = lifecycleOwner
+        currentPreviewView = previewView
+        currentFocusMode = focusMode
+        _isAutoFocus.value = (focusMode == FocusMode.AUTO)
+
         try {
             // Unbind any existing use cases
             provider.unbindAll()
 
-            // Preview
-            preview = Preview.Builder()
-                .build()
-                .also {
-                    it.setSurfaceProvider(previewView.surfaceProvider)
-                }
+            // Build Preview with focus settings baked in
+            val previewBuilder = Preview.Builder()
+            applyFocusSettingsToBuilder(previewBuilder, focusMode)
+            preview = previewBuilder.build().also {
+                it.setSurfaceProvider(previewView.surfaceProvider)
+            }
 
-            // Image Analysis for real-time brightness monitoring
-            imageAnalysis = ImageAnalysis.Builder()
+            // Build ImageAnalysis with same focus settings
+            val analysisBuilder = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
-                .build()
-                .also {
-                    it.setAnalyzer(cameraExecutor, frameAnalyzer)
-                }
+            applyFocusSettingsToBuilder(analysisBuilder, focusMode)
+            imageAnalysis = analysisBuilder.build().also {
+                it.setAnalyzer(cameraExecutor, frameAnalyzer)
+            }
 
-            // Video Capture
+            // Video Capture (Camera2Interop.Extender not directly supported, but
+            // the camera session will use the same settings as Preview/ImageAnalysis)
             val recorder = Recorder.Builder()
                 .setQualitySelector(
                     QualitySelector.from(
@@ -204,8 +277,8 @@ class ShutterCameraManager @Inject constructor(
                 .build()
             videoCapture = VideoCapture.withOutput(recorder)
 
-            // Bind to lifecycle
-            provider.bindToLifecycle(
+            // Bind to lifecycle and store camera reference
+            camera = provider.bindToLifecycle(
                 lifecycleOwner,
                 CameraSelector.DEFAULT_BACK_CAMERA,
                 preview,
@@ -213,10 +286,61 @@ class ShutterCameraManager @Inject constructor(
                 videoCapture
             )
 
+            // Get camera characteristics for manual focus range
+            camera?.cameraInfo?.let { cameraInfo ->
+                try {
+                    val camera2Info = Camera2CameraInfo.from(cameraInfo)
+                    minFocusDistance = camera2Info.getCameraCharacteristic(
+                        CameraCharacteristics.LENS_INFO_MINIMUM_FOCUS_DISTANCE
+                    ) ?: 0f
+                } catch (e: Exception) {
+                    minFocusDistance = 0f
+                }
+            }
+
+            // Reset zoom to 1x
+            _zoomRatio.value = 1f
+
             _cameraState.value = CameraState.Ready
         } catch (e: Exception) {
             val errorMessage = getCameraErrorMessage(e)
             _cameraState.value = CameraState.Error(errorMessage)
+        }
+    }
+
+    /**
+     * Apply focus settings to a UseCase builder using Camera2Interop.Extender.
+     * This must be done BEFORE building the UseCase, as CameraX overrides
+     * AF settings applied dynamically.
+     */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    private fun applyFocusSettingsToBuilder(builder: Any, focusMode: FocusMode) {
+        val extender = when (builder) {
+            is Preview.Builder -> Camera2Interop.Extender(builder)
+            is ImageAnalysis.Builder -> Camera2Interop.Extender(builder)
+            else -> return
+        }
+
+        when (focusMode) {
+            FocusMode.AUTO -> {
+                extender.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_CONTINUOUS_VIDEO
+                )
+            }
+            FocusMode.MANUAL -> {
+                extender.setCaptureRequestOption(
+                    CaptureRequest.CONTROL_AF_MODE,
+                    CameraMetadata.CONTROL_AF_MODE_OFF
+                )
+                // Set initial focus distance (will be updated dynamically)
+                val effectiveMinFocus = if (minFocusDistance > 0f) minFocusDistance else 10f
+                val focusDiopters = effectiveMinFocus * (1f - _focusDistance.value)
+                extender.setCaptureRequestOption(
+                    CaptureRequest.LENS_FOCUS_DISTANCE,
+                    focusDiopters
+                )
+            }
         }
     }
 
@@ -239,10 +363,10 @@ class ShutterCameraManager @Inject constructor(
         recording?.stop()
         recording = null
 
-        // Reset events for new recording
+        // Reset for new recording (including timestamp reference)
         _detectedEvents.value = emptyList()
         eventIndex = 0
-        frameAnalyzer.resetEvents()
+        frameAnalyzer.resetForNewRecording()
 
         // Create output options
         val name = SimpleDateFormat("yyyy-MM-dd-HH-mm-ss-SSS", Locale.US)
@@ -269,7 +393,7 @@ class ShutterCameraManager @Inject constructor(
                     is VideoRecordEvent.Start -> {
                         _isRecording.value = true
                         _cameraState.value = CameraState.Recording
-                        recordingStartTimestamp = System.nanoTime()
+                        // Note: recording start timestamp is captured from first analyzed frame
                     }
                     is VideoRecordEvent.Finalize -> {
                         _isRecording.value = false
@@ -301,6 +425,7 @@ class ShutterCameraManager @Inject constructor(
     fun resetCalibration() {
         frameAnalyzer.reset()
         _isCalibrated.value = false
+        _isWaitingForCalibrationShutter.value = false
         _calibrationProgress.value = 0f
         _detectedEvents.value = emptyList()
         eventIndex = 0
@@ -313,13 +438,98 @@ class ShutterCameraManager @Inject constructor(
 
     /**
      * Get the timestamp when recording started (nanoseconds).
+     * Uses the first analyzed frame's camera timestamp for accurate frame indexing.
      */
-    fun getRecordingStartTimestamp(): Long = recordingStartTimestamp
+    fun getRecordingStartTimestamp(): Long = frameAnalyzer.recordingStartTimestamp
 
     /**
      * Get the baseline brightness from calibration.
      */
     fun getBaselineBrightness(): Double = frameAnalyzer.currentBaseline
+
+    /**
+     * Set the camera zoom ratio.
+     * Uses CameraX native zoom which is simpler and well-supported.
+     *
+     * @param ratio Zoom ratio between 1x and MAX_DIGITAL_ZOOM
+     */
+    fun setZoom(ratio: Float) {
+        val clampedRatio = ratio.coerceIn(1f, MAX_DIGITAL_ZOOM)
+        _zoomRatio.value = clampedRatio
+        camera?.cameraControl?.setZoomRatio(clampedRatio)
+    }
+
+    /**
+     * Enable autofocus mode.
+     * Requires rebinding the camera because CameraX overrides AF settings
+     * applied dynamically via Camera2CameraControl.
+     *
+     * Note: Cannot change focus mode while recording is active.
+     */
+    fun enableAutoFocus() {
+        if (currentFocusMode == FocusMode.AUTO) return // Already in auto mode
+        if (_isRecording.value) return // Cannot rebind while recording
+
+        val lifecycleOwner = currentLifecycleOwner ?: return
+        val previewView = currentPreviewView ?: return
+
+        // Rebind with autofocus mode
+        bindPreview(lifecycleOwner, previewView, FocusMode.AUTO)
+    }
+
+    /**
+     * Enable manual focus mode and set initial focus distance.
+     * Requires rebinding the camera because CameraX overrides AF settings
+     * applied dynamically via Camera2CameraControl.
+     *
+     * Note: Cannot change focus mode while recording is active.
+     *
+     * @param distance Focus distance (0 = near/macro, 1 = infinity)
+     */
+    fun enableManualFocus(distance: Float = _focusDistance.value) {
+        if (_isRecording.value) return // Cannot rebind while recording
+
+        _focusDistance.value = distance.coerceIn(0f, 1f)
+
+        val lifecycleOwner = currentLifecycleOwner ?: return
+        val previewView = currentPreviewView ?: return
+
+        // Rebind with manual focus mode
+        bindPreview(lifecycleOwner, previewView, FocusMode.MANUAL)
+    }
+
+    /**
+     * Set manual focus distance.
+     * Only works when already in manual focus mode (after enableManualFocus was called).
+     *
+     * @param distance Focus distance (0 = near/macro, 1 = infinity)
+     */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    fun setManualFocus(distance: Float) {
+        if (currentFocusMode != FocusMode.MANUAL) {
+            // If not in manual mode, switch to it first
+            enableManualFocus(distance)
+            return
+        }
+
+        _focusDistance.value = distance.coerceIn(0f, 1f)
+
+        // Dynamically update focus distance (this works because AF_MODE=OFF was baked in)
+        val cam = camera ?: return
+        try {
+            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
+            val effectiveMinFocus = if (minFocusDistance > 0f) minFocusDistance else 10f
+            val focusDiopters = effectiveMinFocus * (1f - _focusDistance.value)
+
+            camera2Control.setCaptureRequestOptions(
+                CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.LENS_FOCUS_DISTANCE, focusDiopters)
+                    .build()
+            )
+        } catch (e: Exception) {
+            // Ignore - focus control not available
+        }
+    }
 
     /**
      * Release camera resources.

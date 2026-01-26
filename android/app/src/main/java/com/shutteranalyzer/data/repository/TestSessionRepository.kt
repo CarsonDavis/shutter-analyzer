@@ -256,7 +256,9 @@ class TestSessionRepositoryImpl @Inject constructor(
             endFrame = endFrame,
             brightnessValues = brightnessValues,
             baselineBrightness = null,
-            peakBrightness = null
+            peakBrightness = null,
+            expectedSpeed = expectedSpeed,
+            measuredSpeed = measuredSpeed
         )
     }
 }

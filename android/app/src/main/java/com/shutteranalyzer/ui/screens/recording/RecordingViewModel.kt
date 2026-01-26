@@ -1,12 +1,12 @@
 package com.shutteranalyzer.ui.screens.recording
 
 import android.net.Uri
+import android.util.Log
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.shutteranalyzer.analysis.ShutterSpeedCalculator
 import com.shutteranalyzer.data.camera.CameraState
-import com.shutteranalyzer.data.camera.EventConverter
 import com.shutteranalyzer.data.camera.EventMarker
 import com.shutteranalyzer.data.camera.ShutterCameraManager
 import com.shutteranalyzer.data.repository.TestSessionRepository
@@ -18,14 +18,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+private const val TAG = "RecordingViewModel"
+
 /**
  * Recording state.
  */
 sealed class RecordingState {
     object Initializing : RecordingState()
-    object Calibrating : RecordingState()
+    /** Camera is running, user is setting up before starting detection */
+    object SettingUp : RecordingState()
+    /** Phase 1: Collecting baseline brightness frames */
+    object CalibratingBaseline : RecordingState()
+    /** Phase 2: Waiting for user to fire calibration shutter */
+    object WaitingForCalibrationShutter : RecordingState()
     data class WaitingForShutter(val speed: String, val index: Int, val total: Int) : RecordingState()
     data class EventDetected(val speed: String, val index: Int) : RecordingState()
+    /** Analyzing the recorded video to get accurate frame indices */
+    data class Analyzing(val progress: Float) : RecordingState()
     object Complete : RecordingState()
     data class Error(val message: String) : RecordingState()
 }
@@ -59,7 +68,12 @@ class RecordingViewModel @Inject constructor(
     val calibrationProgress: StateFlow<Float> = cameraManager.calibrationProgress
 
     /**
-     * Whether calibration is complete.
+     * Whether waiting for calibration shutter (Phase 2 of calibration).
+     */
+    val isWaitingForCalibrationShutter: StateFlow<Boolean> = cameraManager.isWaitingForCalibrationShutter
+
+    /**
+     * Whether calibration is complete (both phases).
      */
     val isCalibrated: StateFlow<Boolean> = cameraManager.isCalibrated
 
@@ -72,6 +86,36 @@ class RecordingViewModel @Inject constructor(
      * Camera state.
      */
     val cameraState: StateFlow<CameraState> = cameraManager.cameraState
+
+    /**
+     * Zoom controls.
+     */
+    val zoomRatio: StateFlow<Float> = cameraManager.zoomRatio
+    val minZoomRatio: StateFlow<Float> = cameraManager.minZoomRatio
+    val maxZoomRatio: StateFlow<Float> = cameraManager.maxZoomRatio
+
+    fun setZoom(ratio: Float) {
+        cameraManager.setZoom(ratio)
+    }
+
+    /**
+     * Focus controls.
+     * Note: Switching focus modes requires camera rebinding (brief flicker).
+     */
+    val isAutoFocus: StateFlow<Boolean> = cameraManager.isAutoFocus
+    val focusDistance: StateFlow<Float> = cameraManager.focusDistance
+
+    fun enableAutoFocus() {
+        cameraManager.enableAutoFocus()
+    }
+
+    fun enableManualFocus() {
+        cameraManager.enableManualFocus()
+    }
+
+    fun setManualFocus(distance: Float) {
+        cameraManager.setManualFocus(distance)
+    }
 
     /**
      * Current speed index.
@@ -117,10 +161,20 @@ class RecordingViewModel @Inject constructor(
     }
 
     private fun observeCalibration() {
+        // Phase 1 → Phase 2: Baseline complete, wait for calibration shutter
+        viewModelScope.launch {
+            cameraManager.isWaitingForCalibrationShutter.collect { waiting ->
+                if (waiting && _recordingState.value is RecordingState.CalibratingBaseline) {
+                    _recordingState.value = RecordingState.WaitingForCalibrationShutter
+                }
+            }
+        }
+
+        // Phase 2 complete: Full calibration done, start prompting for speeds
         viewModelScope.launch {
             cameraManager.isCalibrated.collect { calibrated ->
-                if (calibrated && _recordingState.value is RecordingState.Calibrating) {
-                    // Start waiting for the first speed, don't advance (which would skip index 0)
+                if (calibrated && _recordingState.value is RecordingState.WaitingForCalibrationShutter) {
+                    // Calibration shutter was fired and captured - start actual detection
                     startWaitingForFirstShutter()
                 }
             }
@@ -186,17 +240,20 @@ class RecordingViewModel @Inject constructor(
     }
 
     /**
-     * Start the recording and calibration process.
+     * Start video recording (user can set up before detection begins).
      */
     fun startRecording() {
-        _recordingState.value = RecordingState.Calibrating
-        _currentSpeedIndex.value = 0
-        lastProcessedEventCount = 0
-        cameraManager.resetCalibration()
+        _recordingState.value = RecordingState.SettingUp
 
         cameraManager.startRecording(
             onComplete = { uri ->
                 recordedVideoUri = uri
+                Log.d(TAG, "Recording complete, URI: $uri")
+                // Save live-detected events directly (frame indices are now correct)
+                viewModelScope.launch {
+                    saveLiveDetectedEvents(uri)
+                    _recordingState.value = RecordingState.Complete
+                }
             },
             onError = { error ->
                 _recordingState.value = RecordingState.Error(error)
@@ -205,60 +262,64 @@ class RecordingViewModel @Inject constructor(
     }
 
     /**
-     * Stop recording and save detected events.
+     * Begin the detection/calibration process (called after user is ready).
+     * Starts two-phase calibration:
+     * 1. CalibratingBaseline: Collect dark frames to establish baseline
+     * 2. WaitingForCalibrationShutter: User fires shutter once to calibrate peak
      */
-    fun stopRecording() {
-        cameraManager.stopRecording()
-
-        // Check if any events were detected
-        val events = cameraManager.getDetectedEvents()
-        if (events.isEmpty()) {
-            // Still complete, but with zero events - the UI will handle this
-            saveDetectedEvents()
-            _recordingState.value = RecordingState.Complete
-        } else {
-            saveDetectedEvents()
-            _recordingState.value = RecordingState.Complete
-        }
+    fun beginDetection() {
+        _recordingState.value = RecordingState.CalibratingBaseline
+        _currentSpeedIndex.value = 0
+        lastProcessedEventCount = 0
+        cameraManager.resetCalibration()
     }
 
     /**
-     * Save detected events to the database with proper conversion.
+     * Stop recording. Events are saved in onComplete callback.
      */
-    private fun saveDetectedEvents() {
-        viewModelScope.launch {
-            val markers = cameraManager.getDetectedEvents()
-            if (markers.isEmpty()) return@launch
+    fun stopRecording() {
+        Log.d(TAG, "Stopping recording...")
+        cameraManager.stopRecording()
+    }
 
-            // Convert EventMarkers (timestamps) to ShutterEvents (frame indices)
-            val events = EventConverter.toShutterEvents(
-                markers = markers,
-                recordingStartTimestamp = cameraManager.getRecordingStartTimestamp(),
-                fps = _recordingFps.value.toDouble(),
-                baselineBrightness = cameraManager.getBaselineBrightness()
-            )
-
-            // Calculate measured shutter speeds
-            val measuredSpeeds = events.map { event ->
-                ShutterSpeedCalculator.calculateShutterSpeed(
-                    durationFrames = event.weightedDurationFrames,
-                    fps = _recordingFps.value.toDouble()
-                )
-            }
-
-            // Save events with expected speeds
-            testSessionRepository.saveEventsWithExpectedSpeeds(
-                sessionId = sessionId,
-                events = events,
-                measuredSpeeds = measuredSpeeds,
-                expectedSpeeds = _expectedSpeeds.value
-            )
-
-            // Save video URI if we have one
-            recordedVideoUri?.let { uri ->
-                testSessionRepository.updateVideoUri(sessionId, uri.toString())
-            }
+    /**
+     * Save events from live detection.
+     */
+    private suspend fun saveLiveDetectedEvents(videoUri: Uri) {
+        val markers = cameraManager.getDetectedEvents()
+        if (markers.isEmpty()) {
+            // Just save the video URI even if no events
+            testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
+            return
         }
+
+        // Convert EventMarkers (timestamps) to ShutterEvents (frame indices)
+        val events = com.shutteranalyzer.data.camera.EventConverter.toShutterEvents(
+            markers = markers,
+            recordingStartTimestamp = cameraManager.getRecordingStartTimestamp(),
+            fps = _recordingFps.value.toDouble(),
+            baselineBrightness = cameraManager.getBaselineBrightness()
+        )
+
+        // Calculate measured shutter speeds
+        val measuredSpeeds = events.map { event ->
+            ShutterSpeedCalculator.calculateShutterSpeed(
+                durationFrames = event.weightedDurationFrames,
+                fps = _recordingFps.value.toDouble()
+            )
+        }
+
+        // Save events with expected speeds
+        testSessionRepository.saveEventsWithExpectedSpeeds(
+            sessionId = sessionId,
+            events = events,
+            measuredSpeeds = measuredSpeeds,
+            expectedSpeeds = _expectedSpeeds.value
+        )
+
+        // Save video URI
+        testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
+        Log.d(TAG, "Saved ${events.size} live-detected events")
     }
 
     /**
