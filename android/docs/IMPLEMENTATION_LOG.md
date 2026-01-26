@@ -1588,6 +1588,102 @@ Fixed 5 bugs reported in testing:
 All 5 bugs fixed and tested. App is ready for further testing.
 
 ### Next Steps
+- Expandable Frame Boundaries Feature ✅
+
+---
+
+## 2025-01-25 - Expandable Frame Boundaries Feature
+
+### Overview
+Added the ability for users to expand event boundaries in the Event Review screen by adding more frames before/after the detected event. This helps when automatic detection missed the start or end of a shutter event.
+
+### Problem
+Automatic event detection sometimes clips event boundaries too tightly:
+- Edge frames with partial brightness may be excluded
+- User needs to verify if adjacent frames should be included
+
+### Solution
+- Reduced default context frames from 2 to 1 on each side
+- Added [+] "Examine more" buttons on left and right of frame grid
+- Clicking [+] adds 3 frames from that direction (excluded by default)
+- Users can tap new frames to cycle their state (Full/Partial/Excluded)
+- Can click [+] multiple times to keep adding frames
+
+### Files Modified
+
+#### `ui/screens/review/EventReviewViewModel.kt`
+
+**New Constants:**
+```kotlin
+private const val DEFAULT_CONTEXT_FRAMES = 1  // Was 2
+private const val FRAMES_TO_ADD_ON_EXPAND = 3
+```
+
+**New State:**
+```kotlin
+private val extraFramesBefore = mutableMapOf<Int, Int>()  // eventIndex -> count
+private val extraFramesAfter = mutableMapOf<Int, Int>()   // eventIndex -> count
+```
+
+**New Methods:**
+| Method | Purpose |
+|--------|---------|
+| `getContextFramesBefore(eventIndex)` | Returns DEFAULT + extra frames before |
+| `getContextFramesAfter(eventIndex)` | Returns DEFAULT + extra frames after |
+| `addFramesBefore(eventIndex)` | Adds 3 frames before, reloads thumbnails |
+| `addFramesAfter(eventIndex)` | Adds 3 frames after, reloads thumbnails |
+
+**Updated Methods:**
+- `createReviewEvent()` - Uses dynamic context counts
+- `loadThumbnailsForEvent()` - Extracts frames based on dynamic counts
+- `prefetchEvent()` - Uses dynamic context counts
+- `cycleFrameState()` - Handles dynamic context frame indices
+
+#### `ui/screens/review/EventReviewScreen.kt`
+
+**New Composable:**
+```kotlin
+@Composable
+private fun ExpandFramesButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+)
+```
+- Card with [+] icon and "Examine more" text
+- Matches frame thumbnail sizing (80dp width, 9:16 aspect ratio)
+- Uses surfaceVariant background with 50% alpha
+
+**Modified EventReviewContent:**
+- Added `onAddFramesBefore: () -> Unit` parameter
+- Added `onAddFramesAfter: () -> Unit` parameter
+- FlowRow now includes ExpandFramesButton on both sides
+
+**Modified EventReviewScreen:**
+- Wired callbacks to ViewModel methods
+
+### Visual Layout
+```
+┌───────────────────────────────────────────────────────────┐
+│ [+]  │ [ctx] │ [EVT] [EVT] [EVT] [EVT] │ [ctx] │  [+]    │
+│ more │  14   │  187   245   242   95   │  15   │  more   │
+│      │ gray  │ green green green orange│ gray  │         │
+└───────────────────────────────────────────────────────────┘
+```
+
+### Edge Cases Handled
+1. **Frame 0 boundary**: Checks `startFrame - totalContextBefore >= 0` before adding
+2. **Video end**: Frame extraction fails gracefully for frames past video end
+3. **State persistence**: Extra frames are session-only (not persisted to DB)
+4. **Memory**: Uses existing LRU cache - triggers reload when expanding
+
+### Files Summary
+
+| File | Change Type |
+|------|-------------|
+| `EventReviewViewModel.kt` | MODIFY - Add state tracking, helper methods, update frame extraction |
+| `EventReviewScreen.kt` | MODIFY - Add ExpandFramesButton composable, wire to ViewModel |
+
+### Next Steps
 - Phase 8: Publishing
 
 ---

@@ -105,6 +105,18 @@ class EventReviewViewModel @Inject constructor(
     private val loadedEventIndices = mutableSetOf<Int>()
 
     /**
+     * Track extra context frames added by user before each event.
+     * Key is eventIndex, value is the number of extra frames added.
+     */
+    private val extraFramesBefore = mutableMapOf<Int, Int>()
+
+    /**
+     * Track extra context frames added by user after each event.
+     * Key is eventIndex, value is the number of extra frames added.
+     */
+    private val extraFramesAfter = mutableMapOf<Int, Int>()
+
+    /**
      * Cache of thumbnails per event index.
      * Used for LRU eviction when memory limit exceeded.
      */
@@ -182,9 +194,11 @@ class EventReviewViewModel @Inject constructor(
             // Collect frame numbers for this single event
             val frameNumbers = mutableListOf<Int>()
 
-            // Context frames before (2)
-            frameNumbers.add(event.startFrame - 2)
-            frameNumbers.add(event.startFrame - 1)
+            // Context frames before (dynamic count)
+            val contextBefore = getContextFramesBefore(eventIndex)
+            for (i in contextBefore downTo 1) {
+                frameNumbers.add(event.startFrame - i)
+            }
 
             // Event frames - sample if too many
             val eventFrameCount = event.brightnessValues.size
@@ -200,9 +214,11 @@ class EventReviewViewModel @Inject constructor(
                 }
             }
 
-            // Context frames after (2)
-            frameNumbers.add(event.endFrame + 1)
-            frameNumbers.add(event.endFrame + 2)
+            // Context frames after (dynamic count)
+            val contextAfter = getContextFramesAfter(eventIndex)
+            for (i in 1..contextAfter) {
+                frameNumbers.add(event.endFrame + i)
+            }
 
             Log.d(TAG, "Extracting ${frameNumbers.size} frames for event $eventIndex")
 
@@ -293,8 +309,12 @@ class EventReviewViewModel @Inject constructor(
 
         // Collect frame numbers
         val frameNumbers = mutableListOf<Int>()
-        frameNumbers.add(event.startFrame - 2)
-        frameNumbers.add(event.startFrame - 1)
+
+        // Context frames before (dynamic count)
+        val contextBefore = getContextFramesBefore(eventIndex)
+        for (i in contextBefore downTo 1) {
+            frameNumbers.add(event.startFrame - i)
+        }
 
         val eventFrameCount = event.brightnessValues.size
         if (eventFrameCount <= MAX_FRAMES_PER_EVENT) {
@@ -309,8 +329,11 @@ class EventReviewViewModel @Inject constructor(
             }
         }
 
-        frameNumbers.add(event.endFrame + 1)
-        frameNumbers.add(event.endFrame + 2)
+        // Context frames after (dynamic count)
+        val contextAfter = getContextFramesAfter(eventIndex)
+        for (i in 1..contextAfter) {
+            frameNumbers.add(event.endFrame + i)
+        }
 
         val thumbnails = frameExtractor.extractFrames(
             videoUri = videoUri,
@@ -377,6 +400,75 @@ class EventReviewViewModel @Inject constructor(
 
         /** Maximum events to keep thumbnails in memory (LRU eviction) */
         private const val MAX_EVENTS_IN_MEMORY = 5
+
+        /** Default number of context frames shown on each side */
+        private const val DEFAULT_CONTEXT_FRAMES = 1
+
+        /** Number of frames to add when user clicks [+] expand button */
+        private const val FRAMES_TO_ADD_ON_EXPAND = 3
+    }
+
+    /**
+     * Get total context frames to show before an event.
+     */
+    fun getContextFramesBefore(eventIndex: Int): Int {
+        return DEFAULT_CONTEXT_FRAMES + (extraFramesBefore[eventIndex] ?: 0)
+    }
+
+    /**
+     * Get total context frames to show after an event.
+     */
+    fun getContextFramesAfter(eventIndex: Int): Int {
+        return DEFAULT_CONTEXT_FRAMES + (extraFramesAfter[eventIndex] ?: 0)
+    }
+
+    /**
+     * Add more frames before the current event.
+     * Called when user taps the [+] button on the left.
+     */
+    fun addFramesBefore(eventIndex: Int) {
+        val session = cachedSession ?: return
+        if (eventIndex !in session.events.indices) return
+
+        val event = session.events[eventIndex]
+        val currentBefore = getContextFramesBefore(eventIndex)
+
+        // Check if we can add more frames (don't go below frame 0)
+        if (event.startFrame - currentBefore - FRAMES_TO_ADD_ON_EXPAND < 0) {
+            // Calculate how many frames we can actually add
+            val maxCanAdd = event.startFrame - currentBefore
+            if (maxCanAdd > 0) {
+                extraFramesBefore[eventIndex] = (extraFramesBefore[eventIndex] ?: 0) + maxCanAdd
+            }
+        } else {
+            extraFramesBefore[eventIndex] = (extraFramesBefore[eventIndex] ?: 0) + FRAMES_TO_ADD_ON_EXPAND
+        }
+
+        Log.d(TAG, "Added frames before event $eventIndex, total before: ${getContextFramesBefore(eventIndex)}")
+
+        // Mark as needing reload and reload thumbnails
+        loadedEventIndices.remove(eventIndex)
+        eventThumbnailCache.remove(eventIndex)
+        loadThumbnailsForEvent(eventIndex)
+    }
+
+    /**
+     * Add more frames after the current event.
+     * Called when user taps the [+] button on the right.
+     */
+    fun addFramesAfter(eventIndex: Int) {
+        val session = cachedSession ?: return
+        if (eventIndex !in session.events.indices) return
+
+        // Add frames (video end boundary is handled gracefully by frame extraction)
+        extraFramesAfter[eventIndex] = (extraFramesAfter[eventIndex] ?: 0) + FRAMES_TO_ADD_ON_EXPAND
+
+        Log.d(TAG, "Added frames after event $eventIndex, total after: ${getContextFramesAfter(eventIndex)}")
+
+        // Mark as needing reload and reload thumbnails
+        loadedEventIndices.remove(eventIndex)
+        eventThumbnailCache.remove(eventIndex)
+        loadThumbnailsForEvent(eventIndex)
     }
 
     private fun createReviewEvent(
@@ -433,12 +525,15 @@ class EventReviewViewModel @Inject constructor(
             )
         }
 
-        // Add context frames (2 before and 2 after) - also support manual state override
-        val contextBeforeIndices = listOf(-2, -1)
-        val contextAfterIndices = listOf(frameIndices.size, frameIndices.size + 1)
+        // Add context frames (dynamic count before and after) - also support manual state override
+        val contextBeforeCount = getContextFramesBefore(index)
+        val contextAfterCount = getContextFramesAfter(index)
+
+        // Build context before indices: e.g., if contextBeforeCount=4, indices are -4, -3, -2, -1
+        val contextBeforeIndices = (-contextBeforeCount until 0).toList()
 
         val contextBefore = contextBeforeIndices.mapIndexed { idx, offset ->
-            val contextKey = index to (-(idx + 1))  // Use negative indices for context before
+            val contextKey = index to (-(contextBeforeCount - idx))  // Use negative indices for context before
             val contextManualState = frameStateOverrides[contextKey]
             val frameNumber = event.startFrame + offset
 
@@ -460,7 +555,7 @@ class EventReviewViewModel @Inject constructor(
             )
         }
 
-        val contextAfter = contextAfterIndices.mapIndexed { idx, frameListIdx ->
+        val contextAfter = (0 until contextAfterCount).map { idx ->
             val contextKey = index to (1000 + idx)  // Use large indices for context after
             val contextManualState = frameStateOverrides[contextKey]
             val frameNumber = event.endFrame + 1 + idx
@@ -552,10 +647,13 @@ class EventReviewViewModel @Inject constructor(
 
         // Determine the storage key based on whether it's a context frame
         // Context frames use special indices: negative for before, 1000+ for after
+        val contextBeforeCount = getContextFramesBefore(eventIndex)
+        val contextAfterCount = getContextFramesAfter(eventIndex)
+
         val storageKey = when {
-            frame.isContext && frameIndex < 2 -> eventIndex to (-(frameIndex + 1))  // Context before
-            frame.isContext -> eventIndex to (1000 + (frameIndex - currentEvent.frames.size + 2))  // Context after
-            else -> eventIndex to (frameIndex - 2)  // Regular frames (offset by 2 context frames before)
+            frame.isContext && frameIndex < contextBeforeCount -> eventIndex to (-(contextBeforeCount - frameIndex))  // Context before
+            frame.isContext -> eventIndex to (1000 + (frameIndex - currentEvent.frames.size + contextAfterCount))  // Context after
+            else -> eventIndex to (frameIndex - contextBeforeCount)  // Regular frames (offset by context frames before)
         }
 
         // Determine current state and next state

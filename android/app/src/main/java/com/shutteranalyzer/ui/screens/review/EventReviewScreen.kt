@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.NavigateBefore
 import androidx.compose.material.icons.automirrored.filled.NavigateNext
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -162,6 +163,12 @@ fun EventReviewScreen(
                             event = event,
                             onCycleFrameState = { frameIndex ->
                                 viewModel.cycleFrameState(frameIndex)
+                            },
+                            onAddFramesBefore = {
+                                viewModel.addFramesBefore(currentEventIndex)
+                            },
+                            onAddFramesAfter = {
+                                viewModel.addFramesAfter(currentEventIndex)
                             }
                         )
                     }
@@ -195,7 +202,9 @@ fun EventReviewScreen(
 @Composable
 private fun EventReviewContent(
     event: ReviewEvent,
-    onCycleFrameState: (Int) -> Unit
+    onCycleFrameState: (Int) -> Unit,
+    onAddFramesBefore: () -> Unit,
+    onAddFramesAfter: () -> Unit
 ) {
     Column {
         // Event header
@@ -215,18 +224,25 @@ private fun EventReviewContent(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // Frame grid
+        // Frame grid with expand buttons on sides
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // [+] button on left to add frames before
+            ExpandFramesButton(onClick = onAddFramesBefore)
+
+            // Frame thumbnails
             event.frames.forEachIndexed { index, frame ->
                 FrameThumbnail(
                     frame = frame,
                     onClick = { onCycleFrameState(index) }
                 )
             }
+
+            // [+] button on right to add frames after
+            ExpandFramesButton(onClick = onAddFramesAfter)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -387,6 +403,47 @@ private fun FrameThumbnail(
                     color = stateLabelColor
                 )
             }
+        }
+    }
+}
+
+/**
+ * Button to expand frame boundaries by adding more frames.
+ */
+@Composable
+private fun ExpandFramesButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Card(
+        modifier = modifier
+            .width(80.dp)
+            .clickable(onClick = onClick),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        )
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .aspectRatio(9f / 16f)
+                .padding(8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            Icon(
+                imageVector = Icons.Default.Add,
+                contentDescription = "Add more frames",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Examine\nmore",
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

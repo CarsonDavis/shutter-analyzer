@@ -18,6 +18,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | [android/docs/THEORY.md](android/docs/THEORY.md) | Theory of shutter speed measurement |
 | [android/docs/HOW_TO.md](android/docs/HOW_TO.md) | Step-by-step usage guide |
 | [android/docs/VIDEO_DECODER_DESIGN.md](android/docs/VIDEO_DECODER_DESIGN.md) | Video decoder optimization design |
+| [android/docs/EXPAND_FRAMES_FEATURE.md](android/docs/EXPAND_FRAMES_FEATURE.md) | Expandable frame boundaries feature spec |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
 | [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) | Implementation progress log |
 | [architecture.md](architecture.md) | API documentation and technical details |
@@ -359,4 +360,5 @@ See [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) for
 | Phase 7.5 | Bug Fix Round 2 | ✅ Complete |
 | Phase 7.6 | Import Flow & Results Display | ✅ Complete |
 | Phase 7.7 | Event Preview Feature | ✅ Complete |
+| Phase 7.8 | Thumbnail Loading Optimization | ✅ Complete |
 | Phase 8 | Publishing | ⏳ Pending |

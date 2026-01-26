@@ -210,18 +210,23 @@ Based on initial requirements gathering:
 **Layout** (per event, shown one at a time):
 - Event label: "Event 1: 1/1000"
 - Frame strip showing:
-  - 2 **context frames** before event (dark, outside detection boundary)
+  - **[+] Examine more** button (left side) - adds 3 frames before
+  - 1 **context frame** before event (dark, outside detection boundary)
   - All **detected event frames** (brightness above threshold)
-  - 2 **context frames** after event (dark, outside detection boundary)
+  - 1 **context frame** after event (dark, outside detection boundary)
+  - **Examine more [+]** button (right side) - adds 3 frames after
 - Each frame shows:
   - Frame thumbnail
   - Brightness value or weight indicator
-  - Color coding: blue (context), green (full open), orange (partial), red (low)
+  - Color coding: gray (closed/context), green (full open), orange (partial)
 
 **Interactions**:
-- **Tap frame to toggle**: Include/exclude from event calculation
+- **Tap frame to cycle state**: Full → Partial → Excluded → Full
   - Useful if detection boundary is slightly off
-  - User can add context frame to event, or remove edge frame from event
+  - User can promote context frame to included, or exclude edge frame from event
+- **[+] Examine more buttons**: Add 3 more frames on that side (excluded by default)
+  - Can click multiple times to keep adding frames
+  - Useful when detection missed start/end of shutter event
 - **Navigation**: "Previous Event" / "Next Event" buttons
 - **Progress**: "Reviewing 3 of 11 events"
 - **Finish**: "Confirm & Calculate" button when done reviewing all
@@ -229,14 +234,16 @@ Based on initial requirements gathering:
 **Example visual**:
 ```
 Event 3: 1/250
-┌─────────────────────────────────────────────────────┐
-│ [ctx] [ctx] │ [EVT] [EVT] [EVT] [EVT] │ [ctx] [ctx] │
-│  12    14   │  187   245   242   95   │  18    15   │
-│ blue  blue  │ green green green orange│ blue  blue  │
-└─────────────────────────────────────────────────────┘
-         Tap any frame to include/exclude
+┌───────────────────────────────────────────────────────────┐
+│ [+]  │ [ctx] │ [EVT] [EVT] [EVT] [EVT] │ [ctx] │  [+]    │
+│ more │  14   │  187   245   242   95   │  15   │  more   │
+│      │ gray  │ green green green orange│ gray  │         │
+└───────────────────────────────────────────────────────────┘
+         Tap any frame to cycle state
               [← Previous]  [Next →]
 ```
+
+See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementation spec.
 
 ---
 
