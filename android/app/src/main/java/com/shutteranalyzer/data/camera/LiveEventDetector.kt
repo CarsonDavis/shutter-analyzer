@@ -8,10 +8,13 @@ import com.shutteranalyzer.analysis.model.stdDev
  * State of the live event detector.
  *
  * Two-phase calibration flow:
- * CalibratingBaseline → WaitingForCalibrationShutter → CapturingCalibrationEvent → WaitingForEvent → EventInProgress
+ * Idle → CalibratingBaseline → WaitingForCalibrationShutter → CapturingCalibrationEvent → WaitingForEvent → EventInProgress
  */
 sealed class DetectorState {
-    /** Phase 1: Collecting baseline frames (dark, shutter closed) */
+    /** Initial state: Waiting for user to start calibration */
+    object Idle : DetectorState()
+
+    /** Phase 1: Collecting baseline frames (dark, shutter closed) - 5 seconds time-based */
     object CalibratingBaseline : DetectorState()
 
     /** Phase 2: Baseline established, waiting for user to fire calibration shutter */
@@ -69,8 +72,11 @@ sealed class EventResult {
  */
 class LiveEventDetector {
 
-    private var state: DetectorState = DetectorState.CalibratingBaseline
+    private var state: DetectorState = DetectorState.Idle
     private val calibrationFrames = mutableListOf<Double>()
+
+    /** Timestamp when baseline calibration started (nanoseconds) */
+    private var calibrationStartTimestamp: Long = 0L
 
     // Baseline calibration results
     private var baseline: Double = 0.0
@@ -85,16 +91,22 @@ class LiveEventDetector {
     private var eventCount = 0
 
     /**
-     * Number of frames to collect during baseline calibration.
-     * At 60fps, this is ~1 second. At 120fps, ~0.5 seconds.
+     * Duration of baseline calibration in seconds.
+     * Calibration is time-based to ensure consistent 5-second calibration regardless of frame rate.
      */
-    var calibrationFrameCount: Int = CALIBRATION_FRAME_COUNT
+    var calibrationDurationSeconds: Double = CALIBRATION_DURATION_SECONDS
 
     /**
      * Factor for final threshold calculation.
      * threshold = baseline + (peak - baseline) * thresholdFactor
      */
     var thresholdFactor: Double = DEFAULT_THRESHOLD_FACTOR
+
+    /**
+     * Whether the detector is in idle state (waiting for calibration to start).
+     */
+    val isIdle: Boolean
+        get() = state is DetectorState.Idle
 
     /**
      * Whether the detector is in baseline calibration phase.
@@ -122,15 +134,25 @@ class LiveEventDetector {
 
     /**
      * Progress of calibration (0.0 to 1.0).
-     * Baseline phase: 0.0 to 0.5
+     * Idle: 0.0
+     * Baseline phase: 0.0 to 0.5 (time-based)
      * Waiting for calibration shutter: 0.5
      * Capturing calibration event: 0.75
      * Complete: 1.0
      */
     val calibrationProgress: Float
         get() = when (state) {
-            is DetectorState.CalibratingBaseline ->
-                calibrationFrames.size.toFloat() / calibrationFrameCount * 0.5f
+            is DetectorState.Idle -> 0f
+            is DetectorState.CalibratingBaseline -> {
+                if (calibrationStartTimestamp == 0L) {
+                    0f
+                } else {
+                    // Progress based on elapsed time
+                    val elapsedNanos = System.nanoTime() - calibrationStartTimestamp
+                    val elapsedSeconds = elapsedNanos / 1_000_000_000.0
+                    (elapsedSeconds / calibrationDurationSeconds).coerceIn(0.0, 0.5).toFloat()
+                }
+            }
             is DetectorState.WaitingForCalibrationShutter -> 0.5f
             is DetectorState.CapturingCalibrationEvent -> 0.75f
             else -> 1.0f
@@ -176,9 +198,24 @@ class LiveEventDetector {
      */
     fun processFrame(brightness: Double, timestamp: Long): EventResult? {
         return when (val currentState = state) {
+            is DetectorState.Idle -> {
+                // Ignore frames when idle - waiting for user to start calibration
+                null
+            }
+
             is DetectorState.CalibratingBaseline -> {
+                // Capture first frame timestamp if not set
+                if (calibrationStartTimestamp == 0L) {
+                    calibrationStartTimestamp = System.nanoTime()
+                }
+
                 calibrationFrames.add(brightness)
-                if (calibrationFrames.size >= calibrationFrameCount) {
+
+                // Check if calibration duration has elapsed (time-based)
+                val elapsedNanos = System.nanoTime() - calibrationStartTimestamp
+                val elapsedSeconds = elapsedNanos / 1_000_000_000.0
+
+                if (elapsedSeconds >= calibrationDurationSeconds) {
                     finishBaselineCalibration()
                     state = DetectorState.WaitingForCalibrationShutter
                     EventResult.BaselineCalibrationComplete
@@ -242,12 +279,13 @@ class LiveEventDetector {
     }
 
     /**
-     * Reset the detector to initial state.
+     * Reset the detector to initial state (Idle).
      * Clears calibration and event history.
      */
     fun reset() {
-        state = DetectorState.CalibratingBaseline
+        state = DetectorState.Idle
         calibrationFrames.clear()
+        calibrationStartTimestamp = 0L
         baseline = 0.0
         maxSeenDuringBaseline = 0.0
         baselineStdDev = 0.0
@@ -255,6 +293,22 @@ class LiveEventDetector {
         calibrationPeak = 0.0
         threshold = 0.0
         eventCount = 0
+    }
+
+    /**
+     * Start baseline calibration from Idle state.
+     * Transitions from Idle → CalibratingBaseline.
+     *
+     * @return true if calibration was started, false if not in Idle state
+     */
+    fun startBaselineCalibration(): Boolean {
+        if (state !is DetectorState.Idle) {
+            return false
+        }
+        state = DetectorState.CalibratingBaseline
+        calibrationStartTimestamp = 0L // Will be set on first frame
+        calibrationFrames.clear()
+        return true
     }
 
     /**
@@ -317,8 +371,8 @@ class LiveEventDetector {
     }
 
     companion object {
-        /** Default number of frames for baseline calibration */
-        const val CALIBRATION_FRAME_COUNT = 60
+        /** Default duration of baseline calibration in seconds */
+        const val CALIBRATION_DURATION_SECONDS = 5.0
 
         /** Default threshold factor (80% of brightness range) */
         const val DEFAULT_THRESHOLD_FACTOR = 0.8

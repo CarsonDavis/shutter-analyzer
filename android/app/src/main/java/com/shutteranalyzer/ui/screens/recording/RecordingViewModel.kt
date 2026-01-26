@@ -27,7 +27,9 @@ sealed class RecordingState {
     object Initializing : RecordingState()
     /** Camera is running, user is setting up before starting detection */
     object SettingUp : RecordingState()
-    /** Phase 1: Collecting baseline brightness frames */
+    /** New: Waiting for user to confirm ready for baseline calibration */
+    object ReadyForBaseline : RecordingState()
+    /** Phase 1: Collecting baseline brightness frames (5 seconds) */
     object CalibratingBaseline : RecordingState()
     /** Phase 2: Waiting for user to fire calibration shutter */
     object WaitingForCalibrationShutter : RecordingState()
@@ -262,19 +264,30 @@ class RecordingViewModel @Inject constructor(
     }
 
     /**
-     * Begin the detection/calibration process (called after user is ready).
-     * Starts two-phase calibration:
-     * 1. CalibratingBaseline: Collect dark frames to establish baseline
-     * 2. WaitingForCalibrationShutter: User fires shutter once to calibrate peak
+     * Begin the detection process (called after user is ready).
+     * Shows the ReadyForBaseline screen with instructions.
+     * User must click "Ready" to actually start calibration.
      *
      * Also locks auto-exposure to prevent brightness fluctuations during detection.
      */
     fun beginDetection() {
-        _recordingState.value = RecordingState.CalibratingBaseline
+        _recordingState.value = RecordingState.ReadyForBaseline
         _currentSpeedIndex.value = 0
         lastProcessedEventCount = 0
         cameraManager.resetCalibration()
         cameraManager.lockExposure()
+    }
+
+    /**
+     * Start the actual baseline calibration (called when user clicks "Ready").
+     * Starts two-phase calibration:
+     * 1. CalibratingBaseline: Collect dark frames for 5 seconds to establish baseline
+     * 2. WaitingForCalibrationShutter: User fires shutter once to calibrate peak
+     */
+    fun startBaselineCalibration() {
+        if (cameraManager.startBaselineCalibration()) {
+            _recordingState.value = RecordingState.CalibratingBaseline
+        }
     }
 
     /**

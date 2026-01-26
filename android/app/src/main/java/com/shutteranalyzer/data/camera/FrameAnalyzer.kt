@@ -46,6 +46,12 @@ class FrameAnalyzer @Inject constructor() : ImageAnalysis.Analyzer {
         get() = firstFrameTimestamp
 
     /**
+     * Whether the analyzer is in idle state (waiting for calibration to start).
+     */
+    val isIdle: Boolean
+        get() = liveEventDetector.isIdle
+
+    /**
      * Whether the analyzer is in baseline calibration phase.
      */
     val isCalibratingBaseline: Boolean
@@ -160,6 +166,16 @@ class FrameAnalyzer @Inject constructor() : ImageAnalysis.Analyzer {
     }
 
     /**
+     * Start baseline calibration from idle state.
+     * Transitions the detector from Idle → CalibratingBaseline.
+     *
+     * @return true if calibration was started, false if not in Idle state
+     */
+    fun startBaselineCalibration(): Boolean {
+        return liveEventDetector.startBaselineCalibration()
+    }
+
+    /**
      * Reset the analyzer and event detector for recalibration.
      * Does NOT reset firstFrameTimestamp - use resetForNewRecording() for that.
      */
@@ -190,11 +206,11 @@ class FrameAnalyzer @Inject constructor() : ImageAnalysis.Analyzer {
     /**
      * Set calibration parameters.
      *
-     * @param frameCount Number of frames to collect during baseline calibration
+     * @param durationSeconds Duration of baseline calibration in seconds (default 5.0)
      * @param thresholdFactor Factor for final threshold (default 0.8 = 80% of peak)
      */
-    fun setCalibrationParameters(frameCount: Int = 60, thresholdFactor: Double = 0.8) {
-        liveEventDetector.calibrationFrameCount = frameCount
+    fun setCalibrationParameters(durationSeconds: Double = 5.0, thresholdFactor: Double = 0.8) {
+        liveEventDetector.calibrationDurationSeconds = durationSeconds
         liveEventDetector.thresholdFactor = thresholdFactor
     }
 }

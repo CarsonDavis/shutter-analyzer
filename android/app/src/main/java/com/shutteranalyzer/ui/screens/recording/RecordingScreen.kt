@@ -160,6 +160,12 @@ fun RecordingScreen(
                     onCancel = onCancel
                 )
             }
+            is RecordingState.ReadyForBaseline -> {
+                ReadyForBaselineOverlay(
+                    onReady = viewModel::startBaselineCalibration,
+                    onCancel = onCancel
+                )
+            }
             is RecordingState.CalibratingBaseline -> {
                 CalibratingOverlay(
                     progress = calibrationProgress,
@@ -481,6 +487,110 @@ private fun CalibratingOverlay(
                 Text("Cancel", color = Color.White)
             }
         }
+    }
+}
+
+@Composable
+private fun ReadyForBaselineOverlay(
+    onReady: () -> Unit,
+    onCancel: () -> Unit
+) {
+    Box(
+        modifier = Modifier.fillMaxSize(),
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Spacer(modifier = Modifier.weight(1f))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color.Black.copy(alpha = 0.8f)
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Lightbulb icon
+                    Text(
+                        text = "Prepare for Calibration",
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    )
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "Before calibrating, ensure:",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // Checklist items
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        ChecklistItem(text = "Light source is ON")
+                        ChecklistItem(text = "Phone can see through shutter")
+                        ChecklistItem(text = "Shutter is CLOSED")
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Text(
+                        text = "The app will measure the dark baseline for 5 seconds.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color.White.copy(alpha = 0.6f),
+                        textAlign = TextAlign.Center
+                    )
+
+                    Spacer(modifier = Modifier.height(24.dp))
+
+                    Button(
+                        onClick = onReady,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Ready")
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.weight(1f))
+
+            TextButton(onClick = onCancel) {
+                Text("Cancel", color = Color.White)
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChecklistItem(text: String) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            imageVector = Icons.Default.Check,
+            contentDescription = null,
+            tint = AccuracyGreen,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+        Text(
+            text = text,
+            style = MaterialTheme.typography.bodyLarge,
+            color = Color.White
+        )
     }
 }
 

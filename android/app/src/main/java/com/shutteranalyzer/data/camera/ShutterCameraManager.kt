@@ -134,6 +134,9 @@ class ShutterCameraManager @Inject constructor(
     private val _calibrationProgress = MutableStateFlow(0f)
     val calibrationProgress: StateFlow<Float> = _calibrationProgress.asStateFlow()
 
+    private val _isIdle = MutableStateFlow(true)
+    val isIdle: StateFlow<Boolean> = _isIdle.asStateFlow()
+
     private val _isWaitingForCalibrationShutter = MutableStateFlow(false)
     val isWaitingForCalibrationShutter: StateFlow<Boolean> = _isWaitingForCalibrationShutter.asStateFlow()
 
@@ -420,15 +423,30 @@ class ShutterCameraManager @Inject constructor(
     }
 
     /**
-     * Reset the frame analyzer for a new calibration.
+     * Reset the frame analyzer for a new calibration (returns to Idle state).
      */
     fun resetCalibration() {
         frameAnalyzer.reset()
+        _isIdle.value = true
         _isCalibrated.value = false
         _isWaitingForCalibrationShutter.value = false
         _calibrationProgress.value = 0f
         _detectedEvents.value = emptyList()
         eventIndex = 0
+    }
+
+    /**
+     * Start baseline calibration from idle state.
+     * Transitions from Idle → CalibratingBaseline.
+     *
+     * @return true if calibration was started, false if not in Idle state
+     */
+    fun startBaselineCalibration(): Boolean {
+        val started = frameAnalyzer.startBaselineCalibration()
+        if (started) {
+            _isIdle.value = false
+        }
+        return started
     }
 
     /**
