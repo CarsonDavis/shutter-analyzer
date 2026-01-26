@@ -432,6 +432,44 @@ class ShutterCameraManager @Inject constructor(
     }
 
     /**
+     * Lock auto-exposure to prevent brightness fluctuations during detection.
+     * Should be called when detection begins.
+     */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    fun lockExposure() {
+        val cam = camera ?: return
+        try {
+            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
+            camera2Control.setCaptureRequestOptions(
+                CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, true)
+                    .build()
+            )
+        } catch (e: Exception) {
+            // Ignore - AE lock not available on this device
+        }
+    }
+
+    /**
+     * Unlock auto-exposure.
+     * Called when detection/recording stops.
+     */
+    @androidx.annotation.OptIn(ExperimentalCamera2Interop::class)
+    fun unlockExposure() {
+        val cam = camera ?: return
+        try {
+            val camera2Control = Camera2CameraControl.from(cam.cameraControl)
+            camera2Control.setCaptureRequestOptions(
+                CaptureRequestOptions.Builder()
+                    .setCaptureRequestOption(CaptureRequest.CONTROL_AE_LOCK, false)
+                    .build()
+            )
+        } catch (e: Exception) {
+            // Ignore - AE lock not available on this device
+        }
+    }
+
+    /**
      * Get detected events and their timestamps.
      */
     fun getDetectedEvents(): List<EventMarker> = _detectedEvents.value

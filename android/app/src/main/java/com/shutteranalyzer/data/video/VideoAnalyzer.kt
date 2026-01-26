@@ -3,6 +3,7 @@ package com.shutteranalyzer.data.video
 import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
+import android.util.Log
 import com.shutteranalyzer.analysis.EventDetector
 import com.shutteranalyzer.analysis.ThresholdCalculator
 import com.shutteranalyzer.analysis.model.BrightnessStats
@@ -12,6 +13,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val TAG = "VideoAnalyzer"
 
 /**
  * Information about a video file.
@@ -125,6 +128,9 @@ class VideoAnalyzer @Inject constructor(
     /**
      * Analyze a video to detect shutter events.
      *
+     * Uses fast MediaCodec sequential decoding when possible, with
+     * fallback to slower MediaMetadataRetriever if needed.
+     *
      * @param uri URI of the video file
      * @param frameRate Recording frame rate (for accurate timing)
      * @param onProgress Progress callback (0.0 to 1.0)
@@ -135,12 +141,106 @@ class VideoAnalyzer @Inject constructor(
         frameRate: Double,
         onProgress: ProgressCallback? = null
     ): AnalysisResult? = withContext(Dispatchers.IO) {
+        // Try fast MediaCodec path first
+        try {
+            val result = analyzeWithMediaCodec(uri, frameRate, onProgress)
+            if (result != null) {
+                Log.d(TAG, "MediaCodec analysis succeeded: ${result.frameCount} frames, ${result.events.size} events")
+                return@withContext result
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "MediaCodec analysis failed, falling back to MediaMetadataRetriever", e)
+        }
+
+        // Fallback to slower but more compatible MediaMetadataRetriever
+        Log.d(TAG, "Using MediaMetadataRetriever fallback")
+        return@withContext analyzeWithMediaMetadataRetriever(uri, frameRate, onProgress)
+    }
+
+    /**
+     * Fast analysis using MediaCodec sequential decoding.
+     *
+     * Performance: ~0.5-2ms per frame (vs 10-50ms for MediaMetadataRetriever)
+     */
+    private suspend fun analyzeWithMediaCodec(
+        uri: Uri,
+        frameRate: Double,
+        onProgress: ProgressCallback?
+    ): AnalysisResult? {
+        val decoder = SequentialFrameDecoder(context, uri)
+
+        try {
+            if (!decoder.start()) {
+                Log.w(TAG, "Failed to start MediaCodec decoder")
+                return null
+            }
+
+            val brightnessValues = mutableListOf<Double>()
+            var lastProgressUpdate = 0
+
+            while (true) {
+                val yPlane = decoder.decodeNextFrame() ?: break
+
+                // Calculate brightness from Y-plane (luminance)
+                val brightness = decoder.calculateBrightness(yPlane)
+                brightnessValues.add(brightness)
+
+                // Throttle progress updates to every 100 frames
+                val frameCount = decoder.frameCount
+                if (frameCount - lastProgressUpdate >= 100) {
+                    onProgress?.invoke(decoder.getProgress())
+                    lastProgressUpdate = frameCount
+                }
+            }
+
+            if (brightnessValues.isEmpty()) {
+                Log.w(TAG, "No frames decoded")
+                return null
+            }
+
+            Log.d(TAG, "Decoded ${brightnessValues.size} frames via MediaCodec")
+
+            // Calculate statistics and detect events
+            val brightnessStats = thresholdCalculator.analyzeBrightnessDistribution(brightnessValues)
+            val rawEvents = eventDetector.findShutterEvents(
+                brightnessValues = brightnessValues,
+                threshold = brightnessStats.threshold
+            )
+            val events = eventDetector.createShutterEvents(
+                rawEvents = rawEvents,
+                baselineBrightness = brightnessStats.baseline,
+                peakBrightness = brightnessStats.peakBrightness
+            )
+
+            onProgress?.invoke(1.0f)
+
+            return AnalysisResult(
+                events = events,
+                brightnessStats = brightnessStats,
+                frameCount = brightnessValues.size
+            )
+
+        } finally {
+            decoder.release()
+        }
+    }
+
+    /**
+     * Fallback analysis using MediaMetadataRetriever.
+     *
+     * Slower (10-50ms per frame) but more compatible with unusual video formats.
+     */
+    private suspend fun analyzeWithMediaMetadataRetriever(
+        uri: Uri,
+        frameRate: Double,
+        onProgress: ProgressCallback?
+    ): AnalysisResult? {
         val retriever = MediaMetadataRetriever()
         try {
             retriever.setDataSource(context, uri)
 
             val durationMs = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DURATION)
-                ?.toLongOrNull() ?: return@withContext null
+                ?.toLongOrNull() ?: return null
 
             // Calculate approximate frame count
             val estimatedFrameCount = ((durationMs / 1000.0) * frameRate).toInt()
@@ -174,7 +274,7 @@ class VideoAnalyzer @Inject constructor(
             }
 
             if (brightnessValues.isEmpty()) {
-                return@withContext null
+                return null
             }
 
             // Calculate brightness statistics
@@ -195,13 +295,14 @@ class VideoAnalyzer @Inject constructor(
 
             onProgress?.invoke(1.0f)
 
-            AnalysisResult(
+            return AnalysisResult(
                 events = events,
                 brightnessStats = brightnessStats,
                 frameCount = brightnessValues.size
             )
         } catch (e: Exception) {
-            null
+            Log.e(TAG, "MediaMetadataRetriever analysis failed", e)
+            return null
         } finally {
             retriever.release()
         }

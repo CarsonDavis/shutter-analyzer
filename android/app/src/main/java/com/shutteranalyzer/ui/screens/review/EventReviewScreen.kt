@@ -52,10 +52,10 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.shutteranalyzer.ui.screens.review.FrameState
 import com.shutteranalyzer.ui.theme.AccuracyGreen
 import com.shutteranalyzer.ui.theme.AccuracyOrange
 import com.shutteranalyzer.ui.theme.AccuracyYellow
-import com.shutteranalyzer.ui.theme.ContextBlue
 import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
 import kotlinx.coroutines.launch
 
@@ -160,17 +160,23 @@ fun EventReviewScreen(
                     currentEvent?.let { event ->
                         EventReviewContent(
                             event = event,
-                            onToggleFrame = { frameIndex ->
-                                viewModel.toggleFrameInclusion(frameIndex)
+                            onCycleFrameState = { frameIndex ->
+                                viewModel.cycleFrameState(frameIndex)
                             }
                         )
                     }
                 }
 
                 // Navigation and confirm buttons
+                // Check if any event has at least one included (non-context) frame
+                val hasIncludedFrames = events.any { event ->
+                    event.frames.any { frame -> frame.isIncluded && !frame.isContext }
+                }
+
                 BottomControls(
                     currentIndex = currentEventIndex,
                     totalEvents = events.size,
+                    hasIncludedFrames = hasIncludedFrames,
                     onPrevious = viewModel::previousEvent,
                     onNext = viewModel::nextEvent,
                     onConfirm = {
@@ -189,7 +195,7 @@ fun EventReviewScreen(
 @Composable
 private fun EventReviewContent(
     event: ReviewEvent,
-    onToggleFrame: (Int) -> Unit
+    onCycleFrameState: (Int) -> Unit
 ) {
     Column {
         // Event header
@@ -202,7 +208,7 @@ private fun EventReviewContent(
         Spacer(modifier = Modifier.height(8.dp))
 
         Text(
-            text = "Tap frames to adjust boundary",
+            text = "Tap frames to cycle: Full \u2192 Partial \u2192 Excluded",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
@@ -218,7 +224,7 @@ private fun EventReviewContent(
             event.frames.forEachIndexed { index, frame ->
                 FrameThumbnail(
                     frame = frame,
-                    onClick = { if (!frame.isContext) onToggleFrame(index) }
+                    onClick = { onCycleFrameState(index) }
                 )
             }
         }
@@ -235,8 +241,15 @@ private fun FrameThumbnail(
     frame: FrameInfo,
     onClick: () -> Unit
 ) {
+    // Determine border color based on manual state or automatic classification
+    // Context frames and excluded frames both use red (they are "closed/not included")
     val borderColor = when {
-        frame.isContext -> ContextBlue
+        frame.manualState == FrameState.FULL -> AccuracyGreen
+        frame.manualState == FrameState.PARTIAL -> AccuracyOrange
+        frame.manualState == FrameState.EXCLUDED -> MaterialTheme.colorScheme.error
+        // No manual override - use automatic classification
+        // Context frames are treated the same as closed (red border)
+        frame.isContext -> MaterialTheme.colorScheme.error
         !frame.isIncluded -> MaterialTheme.colorScheme.error
         frame.weight >= 0.95 -> AccuracyGreen
         frame.weight >= 0.5 -> AccuracyOrange
@@ -244,7 +257,8 @@ private fun FrameThumbnail(
     }
 
     val borderWidth = when {
-        frame.isContext -> 2.dp
+        frame.manualState != null -> 3.dp  // Thicker border for manually overridden frames
+        frame.isContext -> 3.dp  // Context frames same as closed
         !frame.isIncluded -> 3.dp
         else -> 2.dp
     }
@@ -252,11 +266,7 @@ private fun FrameThumbnail(
     Card(
         modifier = Modifier
             .width(80.dp)
-            .then(
-                if (!frame.isContext) {
-                    Modifier.clickable(onClick = onClick)
-                } else Modifier
-            )
+            .clickable(onClick = onClick)  // All frames are clickable
             .border(
                 width = borderWidth,
                 color = borderColor,
@@ -287,8 +297,12 @@ private fun FrameThumbnail(
                     )
                 } else {
                     // Placeholder while loading or if no thumbnail
+                    // Context frames use same color as closed/excluded
                     val placeholderColor = when {
-                        frame.isContext -> ContextBlue.copy(alpha = 0.3f)
+                        frame.manualState == FrameState.FULL -> AccuracyGreen.copy(alpha = 0.4f)
+                        frame.manualState == FrameState.PARTIAL -> AccuracyOrange.copy(alpha = 0.4f)
+                        frame.manualState == FrameState.EXCLUDED -> Color.Gray.copy(alpha = 0.3f)
+                        frame.isContext -> Color.Gray.copy(alpha = 0.3f)  // Same as closed
                         frame.weight >= 0.95 -> AccuracyGreen.copy(alpha = 0.4f)
                         frame.weight >= 0.5 -> AccuracyOrange.copy(alpha = 0.4f)
                         else -> AccuracyYellow.copy(alpha = 0.3f)
@@ -307,30 +321,33 @@ private fun FrameThumbnail(
                     }
                 }
 
-                // Excluded overlay
-                if (!frame.isIncluded && !frame.isContext) {
+                // Excluded overlay - show X mark for any excluded frame (manual or automatic)
+                // No dark background overlay so the thumbnail remains visible
+                if (!frame.isIncluded) {
                     Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.5f)),
+                        modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = "✕",
                             style = MaterialTheme.typography.titleLarge,
-                            color = Color.White
+                            color = MaterialTheme.colorScheme.error
                         )
                     }
                 }
             }
 
             // Info bar below thumbnail
+            // Context frames use same styling as closed
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         when {
-                            frame.isContext -> ContextBlue.copy(alpha = 0.2f)
+                            frame.manualState == FrameState.FULL -> AccuracyGreen.copy(alpha = 0.2f)
+                            frame.manualState == FrameState.PARTIAL -> AccuracyOrange.copy(alpha = 0.2f)
+                            frame.manualState == FrameState.EXCLUDED -> Color.Gray.copy(alpha = 0.2f)
+                            frame.isContext -> Color.Gray.copy(alpha = 0.2f)  // Same as closed
                             frame.weight >= 0.95 -> AccuracyGreen.copy(alpha = 0.2f)
                             frame.weight >= 0.5 -> AccuracyOrange.copy(alpha = 0.2f)
                             else -> AccuracyYellow.copy(alpha = 0.2f)
@@ -344,25 +361,31 @@ private fun FrameThumbnail(
                 Text(
                     text = "#${frame.frameNumber}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (frame.isContext) ContextBlue else MaterialTheme.colorScheme.onSurface
+                    color = MaterialTheme.colorScheme.onSurface
                 )
 
-                // Brightness or context label
-                if (frame.isContext) {
-                    Text(
-                        text = "ctx",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Bold,
-                        color = ContextBlue
-                    )
-                } else {
-                    Text(
-                        text = "${frame.brightness.toInt()}",
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.Medium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                // State label - show manual override or auto state
+                // Context frames show "out" like other closed frames
+                val stateLabel = when {
+                    frame.manualState == FrameState.FULL -> "full"
+                    frame.manualState == FrameState.PARTIAL -> "half"
+                    frame.manualState == FrameState.EXCLUDED -> "out"
+                    frame.isContext -> "out"  // Context frames are closed
+                    else -> "${frame.brightness.toInt()}"
                 }
+                val stateLabelColor = when {
+                    frame.manualState == FrameState.FULL -> AccuracyGreen
+                    frame.manualState == FrameState.PARTIAL -> AccuracyOrange
+                    frame.manualState == FrameState.EXCLUDED -> MaterialTheme.colorScheme.error
+                    frame.isContext -> MaterialTheme.colorScheme.error  // Same as closed
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant
+                }
+                Text(
+                    text = stateLabel,
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = if (frame.manualState != null || frame.isContext || !frame.isIncluded) FontWeight.Bold else FontWeight.Medium,
+                    color = stateLabelColor
+                )
             }
         }
     }
@@ -377,13 +400,13 @@ private fun Legend() {
     ) {
         Column(modifier = Modifier.padding(12.dp)) {
             Text(
-                text = "Legend:",
+                text = "Legend (tap to cycle):",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Medium
             )
             Spacer(modifier = Modifier.height(8.dp))
             Row(
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 LegendItem(
                     color = AccuracyGreen.copy(alpha = 0.6f),
@@ -394,8 +417,8 @@ private fun Legend() {
                     label = "Partial"
                 )
                 LegendItem(
-                    color = ContextBlue.copy(alpha = 0.3f),
-                    label = "Context"
+                    color = Color.Gray.copy(alpha = 0.5f),
+                    label = "Closed"
                 )
             }
         }
@@ -426,6 +449,7 @@ private fun LegendItem(
 private fun BottomControls(
     currentIndex: Int,
     totalEvents: Int,
+    hasIncludedFrames: Boolean,
     onPrevious: () -> Unit,
     onNext: () -> Unit,
     onConfirm: () -> Unit
@@ -469,12 +493,17 @@ private fun BottomControls(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Confirm button
+        // Confirm button - disabled if no events or no included frames
         Button(
             onClick = onConfirm,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            enabled = totalEvents > 0 && hasIncludedFrames
         ) {
-            Text("CONFIRM & CALCULATE")
+            Text(
+                if (totalEvents == 0) "NO EVENTS"
+                else if (!hasIncludedFrames) "NO FRAMES INCLUDED"
+                else "CONFIRM & CALCULATE"
+            )
         }
     }
 }

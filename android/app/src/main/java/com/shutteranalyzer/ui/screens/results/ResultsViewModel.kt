@@ -95,6 +95,12 @@ class ResultsViewModel @Inject constructor(
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
     /**
+     * Error message if loading fails.
+     */
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    /**
      * Timeline chart data (brightness values, events, threshold).
      */
     private val _timelineData = MutableStateFlow<TimelineData?>(null)
@@ -103,12 +109,6 @@ class ResultsViewModel @Inject constructor(
     init {
         loadSessionAndCalculate()
     }
-
-    /**
-     * Error message if loading fails.
-     */
-    private val _errorMessage = MutableStateFlow<String?>(null)
-    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     private fun loadSessionAndCalculate() {
         viewModelScope.launch {
@@ -319,6 +319,21 @@ class ResultsViewModel @Inject constructor(
             ms >= 1000 -> String.format("%.1fs", ms / 1000)
             ms >= 10 -> String.format("%.1fms", ms)
             else -> String.format("%.2fms", ms)
+        }
+    }
+
+    /**
+     * Format milliseconds as shutter speed (1/x format).
+     * Converts ms to "1/x" where x is the speed rounded to nearest int.
+     */
+    fun formatAsSpeed(ms: Double): String {
+        return when {
+            ms >= 1000 -> String.format("%.0fs", ms / 1000)
+            ms >= 500 -> "1/2"
+            else -> {
+                val speed = 1000.0 / ms
+                "1/${speed.toInt()}"
+            }
         }
     }
 

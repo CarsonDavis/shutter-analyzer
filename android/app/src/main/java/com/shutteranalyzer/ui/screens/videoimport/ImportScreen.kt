@@ -19,6 +19,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Error
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.filled.VideoLibrary
@@ -63,6 +64,7 @@ import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
  *
  * @param onBackClick Callback when back is pressed
  * @param onComplete Callback when import is complete with session ID
+ * @param onEventClick Callback when an event is clicked for preview
  * @param viewModel The ViewModel for this screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -70,6 +72,7 @@ import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
 fun ImportScreen(
     onBackClick: () -> Unit,
     onComplete: (Long) -> Unit,
+    onEventClick: (Int) -> Unit = {},
     viewModel: ImportViewModel = hiltViewModel()
 ) {
     val importState by viewModel.importState.collectAsStateWithLifecycle()
@@ -142,6 +145,8 @@ fun ImportScreen(
                         events = state.events,
                         assignedSpeeds = assignedSpeeds,
                         onSpeedAssign = viewModel::assignSpeed,
+                        onRemoveEvent = viewModel::removeEvent,
+                        onEventClick = onEventClick,
                         onConfirm = { viewModel.createSession() }
                     )
                 }
@@ -340,6 +345,8 @@ private fun SpeedAssignmentStep(
     events: List<ShutterEvent>,
     assignedSpeeds: Map<Int, String>,
     onSpeedAssign: (Int, String) -> Unit,
+    onRemoveEvent: (Int) -> Unit,
+    onEventClick: (Int) -> Unit,
     onConfirm: () -> Unit
 ) {
     Column(
@@ -374,7 +381,9 @@ private fun SpeedAssignmentStep(
                     eventNumber = index + 1,
                     event = event,
                     selectedSpeed = assignedSpeeds[index] ?: "1/60",
-                    onSpeedSelect = { speed -> onSpeedAssign(index, speed) }
+                    onSpeedSelect = { speed -> onSpeedAssign(index, speed) },
+                    onRemove = { onRemoveEvent(index) },
+                    onClick = { onEventClick(index) }
                 )
             }
         }
@@ -397,17 +406,20 @@ private fun EventSpeedCard(
     eventNumber: Int,
     event: ShutterEvent,
     selectedSpeed: String,
-    onSpeedSelect: (String) -> Unit
+    onSpeedSelect: (String) -> Unit,
+    onRemove: () -> Unit,
+    onClick: () -> Unit
 ) {
     var expanded by remember { mutableStateOf(false) }
 
     Card(
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
+        onClick = onClick
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(start = 16.dp, top = 8.dp, bottom = 8.dp, end = 8.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -452,6 +464,15 @@ private fun EventSpeedCard(
                         )
                     }
                 }
+            }
+
+            // Delete button
+            IconButton(onClick = onRemove) {
+                Icon(
+                    imageVector = Icons.Default.Close,
+                    contentDescription = "Remove event",
+                    tint = MaterialTheme.colorScheme.error
+                )
             }
         }
     }

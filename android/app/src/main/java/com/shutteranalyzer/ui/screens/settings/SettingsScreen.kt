@@ -48,6 +48,7 @@ import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
  *
  * @param onBackClick Callback when back button is clicked
  * @param onViewTutorial Callback when "View Tutorial" is clicked
+ * @param onViewTheory Callback when "How It Works" is clicked
  * @param viewModel The ViewModel for this screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -55,6 +56,7 @@ import com.shutteranalyzer.ui.theme.ShutterAnalyzerTheme
 fun SettingsScreen(
     onBackClick: () -> Unit,
     onViewTutorial: () -> Unit,
+    onViewTheory: () -> Unit,
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
@@ -82,6 +84,7 @@ fun SettingsScreen(
                 viewModel.resetOnboarding()
                 onViewTutorial()
             },
+            onViewTheory = onViewTheory,
             modifier = Modifier
                 .fillMaxSize()
                 .padding(paddingValues)
@@ -95,6 +98,7 @@ private fun SettingsContent(
     onSpeedSetChange: (SpeedSet) -> Unit,
     onSensitivityChange: (Sensitivity) -> Unit,
     onViewTutorial: () -> Unit,
+    onViewTheory: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -142,7 +146,7 @@ private fun SettingsContent(
                         contentDescription = null
                     )
                 },
-                modifier = Modifier.clickable { /* TODO: Open theory page */ }
+                modifier = Modifier.clickable(onClick = onViewTheory)
             )
         }
 
@@ -288,7 +292,8 @@ private fun SettingsScreenPreview() {
             settings = AppSettings(),
             onSpeedSetChange = {},
             onSensitivityChange = {},
-            onViewTutorial = {}
+            onViewTutorial = {},
+            onViewTheory = {}
         )
     }
 }

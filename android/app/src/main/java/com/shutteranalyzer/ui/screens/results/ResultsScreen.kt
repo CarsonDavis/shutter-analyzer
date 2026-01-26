@@ -94,6 +94,7 @@ fun ResultsScreen(
     val isSaved by viewModel.isSaved.collectAsStateWithLifecycle()
     val timelineData by viewModel.timelineData.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
+    val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableIntStateOf(ResultsTabs.SUMMARY) }
 
@@ -129,6 +130,54 @@ fun ResultsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
+            }
+            return@Scaffold
+        }
+
+        // Error state
+        if (errorMessage != null) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.padding(32.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            modifier = Modifier.size(64.dp),
+                            tint = MaterialTheme.colorScheme.error.copy(alpha = 0.5f)
+                        )
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Text(
+                            text = "Error Loading Results",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = errorMessage ?: "Unknown error",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                }
+                BottomButtons(
+                    isSaved = true,
+                    onSave = {},
+                    onTestAgain = onTestAgain,
+                    modifier = Modifier.padding(16.dp)
+                )
             }
             return@Scaffold
         }
@@ -238,6 +287,7 @@ fun ResultsScreen(
                             ResultRow(
                                 result = result,
                                 formatMs = viewModel::formatMs,
+                                formatAsSpeed = viewModel::formatAsSpeed,
                                 formatDeviation = viewModel::formatDeviation
                             )
                         }
@@ -419,6 +469,7 @@ private fun ResultsTableHeader() {
 private fun ResultRow(
     result: ShutterResult,
     formatMs: (Double) -> String,
+    formatAsSpeed: (Double) -> String,
     formatDeviation: (Double) -> String
 ) {
     val rowColor = getAccuracyColor(abs(result.deviationPercent)).copy(alpha = 0.1f)
@@ -444,7 +495,7 @@ private fun ResultRow(
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
         Text(
-            text = formatMs(result.measuredMs),
+            text = formatAsSpeed(result.measuredMs),
             style = MaterialTheme.typography.bodySmall,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.End
@@ -562,6 +613,7 @@ private fun ResultRowPreview() {
                     deviationPercent = 6.0
                 ),
                 formatMs = { ms -> "${String.format("%.2f", ms)}ms" },
+                formatAsSpeed = { ms -> "1/${(1000.0 / ms).toInt()}" },
                 formatDeviation = { p -> "+${p.toInt()}%" }
             )
             ResultRow(
@@ -572,6 +624,7 @@ private fun ResultRowPreview() {
                     deviationPercent = 2.0
                 ),
                 formatMs = { ms -> "${String.format("%.2f", ms)}ms" },
+                formatAsSpeed = { ms -> "1/${(1000.0 / ms).toInt()}" },
                 formatDeviation = { p -> "+${p.toInt()}%" }
             )
         }

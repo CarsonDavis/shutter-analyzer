@@ -266,60 +266,87 @@ class RecordingViewModel @Inject constructor(
      * Starts two-phase calibration:
      * 1. CalibratingBaseline: Collect dark frames to establish baseline
      * 2. WaitingForCalibrationShutter: User fires shutter once to calibrate peak
+     *
+     * Also locks auto-exposure to prevent brightness fluctuations during detection.
      */
     fun beginDetection() {
         _recordingState.value = RecordingState.CalibratingBaseline
         _currentSpeedIndex.value = 0
         lastProcessedEventCount = 0
         cameraManager.resetCalibration()
+        cameraManager.lockExposure()
     }
 
     /**
      * Stop recording. Events are saved in onComplete callback.
+     * Also unlocks auto-exposure.
      */
     fun stopRecording() {
         Log.d(TAG, "Stopping recording...")
+        cameraManager.unlockExposure()
         cameraManager.stopRecording()
     }
 
     /**
      * Save events from live detection.
+     * Includes error handling to prevent silent failures.
      */
     private suspend fun saveLiveDetectedEvents(videoUri: Uri) {
-        val markers = cameraManager.getDetectedEvents()
-        if (markers.isEmpty()) {
-            // Just save the video URI even if no events
-            testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
-            return
-        }
+        try {
+            val markers = cameraManager.getDetectedEvents()
+            if (markers.isEmpty()) {
+                // Just save the video URI even if no events
+                try {
+                    testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
+                    Log.d(TAG, "Saved video URI (no events detected)")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to save video URI: ${e.message}", e)
+                }
+                return
+            }
 
-        // Convert EventMarkers (timestamps) to ShutterEvents (frame indices)
-        val events = com.shutteranalyzer.data.camera.EventConverter.toShutterEvents(
-            markers = markers,
-            recordingStartTimestamp = cameraManager.getRecordingStartTimestamp(),
-            fps = _recordingFps.value.toDouble(),
-            baselineBrightness = cameraManager.getBaselineBrightness()
-        )
-
-        // Calculate measured shutter speeds
-        val measuredSpeeds = events.map { event ->
-            ShutterSpeedCalculator.calculateShutterSpeed(
-                durationFrames = event.weightedDurationFrames,
-                fps = _recordingFps.value.toDouble()
+            // Convert EventMarkers (timestamps) to ShutterEvents (frame indices)
+            val events = com.shutteranalyzer.data.camera.EventConverter.toShutterEvents(
+                markers = markers,
+                recordingStartTimestamp = cameraManager.getRecordingStartTimestamp(),
+                fps = _recordingFps.value.toDouble(),
+                baselineBrightness = cameraManager.getBaselineBrightness()
             )
+
+            // Calculate measured shutter speeds
+            val measuredSpeeds = events.map { event ->
+                ShutterSpeedCalculator.calculateShutterSpeed(
+                    durationFrames = event.weightedDurationFrames,
+                    fps = _recordingFps.value.toDouble()
+                )
+            }
+
+            // Save events with expected speeds
+            try {
+                testSessionRepository.saveEventsWithExpectedSpeeds(
+                    sessionId = sessionId,
+                    events = events,
+                    measuredSpeeds = measuredSpeeds,
+                    expectedSpeeds = _expectedSpeeds.value
+                )
+                Log.d(TAG, "Saved ${events.size} events with expected speeds")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save events: ${e.message}", e)
+                // Continue to try saving video URI even if events fail
+            }
+
+            // Save video URI
+            try {
+                testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
+                Log.d(TAG, "Saved video URI: $videoUri")
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to save video URI: ${e.message}", e)
+            }
+
+            Log.d(TAG, "Saved ${events.size} live-detected events")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error in saveLiveDetectedEvents: ${e.message}", e)
         }
-
-        // Save events with expected speeds
-        testSessionRepository.saveEventsWithExpectedSpeeds(
-            sessionId = sessionId,
-            events = events,
-            measuredSpeeds = measuredSpeeds,
-            expectedSpeeds = _expectedSpeeds.value
-        )
-
-        // Save video URI
-        testSessionRepository.updateVideoUri(sessionId, videoUri.toString())
-        Log.d(TAG, "Saved ${events.size} live-detected events")
     }
 
     /**

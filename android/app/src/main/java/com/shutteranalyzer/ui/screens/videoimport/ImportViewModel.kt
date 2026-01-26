@@ -167,6 +167,40 @@ class ImportViewModel @Inject constructor(
     }
 
     /**
+     * Remove an event from the list (mark as not real).
+     */
+    fun removeEvent(eventIndex: Int) {
+        val currentResult = analysisResult ?: return
+        val currentState = _importState.value as? ImportState.AssignSpeeds ?: return
+
+        // Remove the event from the list
+        val updatedEvents = currentState.events.toMutableList().apply {
+            removeAt(eventIndex)
+        }
+
+        // Update the analysis result
+        analysisResult = currentResult.copy(events = updatedEvents)
+
+        // Reindex assigned speeds (shift indices down for events after the removed one)
+        val updatedSpeeds = _assignedSpeeds.value.entries
+            .filter { it.key != eventIndex }
+            .associate { (key, value) ->
+                if (key > eventIndex) key - 1 to value else key to value
+            }
+        _assignedSpeeds.value = updatedSpeeds
+
+        // Update state
+        if (updatedEvents.isEmpty()) {
+            _importState.value = ImportState.Error("All events removed. Please re-analyze or select a different video.")
+        } else {
+            _importState.value = ImportState.AssignSpeeds(
+                events = updatedEvents,
+                analysisResult = analysisResult!!
+            )
+        }
+    }
+
+    /**
      * Create a session with the imported events.
      *
      * This function launches a coroutine to create the session asynchronously.
@@ -252,5 +286,44 @@ class ImportViewModel @Inject constructor(
         _cameraName.value = ""
         _customFrameRate.value = null
         analysisResult = null
+    }
+
+    // ========== Helper methods for EventPreviewScreen ==========
+
+    /**
+     * Get event at specified index.
+     */
+    fun getEvent(index: Int): ShutterEvent? {
+        val state = _importState.value as? ImportState.AssignSpeeds ?: return null
+        return state.events.getOrNull(index)
+    }
+
+    /**
+     * Get assigned speed for event at specified index.
+     */
+    fun getAssignedSpeed(index: Int): String {
+        return _assignedSpeeds.value[index] ?: "1/60"
+    }
+
+    /**
+     * Get recording FPS (custom override or video native FPS).
+     */
+    fun getRecordingFps(): Double {
+        return _customFrameRate.value ?: _videoInfo.value?.frameRate ?: 30.0
+    }
+
+    /**
+     * Get current video URI.
+     */
+    fun getVideoUri(): Uri? {
+        return _videoUri.value
+    }
+
+    /**
+     * Get total event count.
+     */
+    fun getEventCount(): Int {
+        val state = _importState.value as? ImportState.AssignSpeeds ?: return 0
+        return state.events.size
     }
 }

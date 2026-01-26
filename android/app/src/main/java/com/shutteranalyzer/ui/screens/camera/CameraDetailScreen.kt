@@ -254,11 +254,12 @@ private fun SessionCard(
 ) {
     val dateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
         .withZone(ZoneId.systemDefault())
+    val hasEvents = session.events.isNotEmpty()
 
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onClick)
+            .clickable(enabled = hasEvents, onClick = onClick)
     ) {
         Row(
             modifier = Modifier
@@ -273,13 +274,29 @@ private fun SessionCard(
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Text(
-                    text = "${session.events.size} speeds tested",
+                    text = if (hasEvents) {
+                        "${session.events.size} speeds tested"
+                    } else {
+                        "No events recorded"
+                    },
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = if (hasEvents) {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                    }
                 )
             }
-            session.avgDeviationPercent?.let { deviation ->
-                AccuracyIndicator(deviationPercent = abs(deviation))
+            if (hasEvents) {
+                session.avgDeviationPercent?.let { deviation ->
+                    AccuracyIndicator(deviationPercent = abs(deviation))
+                }
+            } else {
+                Text(
+                    text = "Empty",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
             }
         }
     }

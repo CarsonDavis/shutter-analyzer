@@ -6,14 +6,19 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.shutteranalyzer.data.video.FrameExtractor
 import com.shutteranalyzer.ui.screens.camera.CameraDetailScreen
 import com.shutteranalyzer.ui.screens.home.HomeScreen
+import com.shutteranalyzer.ui.screens.videoimport.EventPreviewScreen
 import com.shutteranalyzer.ui.screens.videoimport.ImportScreen
+import com.shutteranalyzer.ui.screens.videoimport.ImportViewModel
 import com.shutteranalyzer.ui.screens.onboarding.OnboardingScreen
 import com.shutteranalyzer.ui.screens.recording.RecordingScreen
 import com.shutteranalyzer.ui.screens.results.ResultsScreen
 import com.shutteranalyzer.ui.screens.review.EventReviewScreen
 import com.shutteranalyzer.ui.screens.settings.SettingsScreen
+import com.shutteranalyzer.ui.screens.settings.TheoryScreen
 import com.shutteranalyzer.ui.screens.setup.RecordingSetupScreen
 
 /**
@@ -32,11 +37,15 @@ sealed class Screen(val route: String) {
         fun createRoute(sessionId: Long) = "results/$sessionId"
     }
     object Settings : Screen("settings")
+    object Theory : Screen("theory")
     object Onboarding : Screen("onboarding")
     object CameraDetail : Screen("camera/{cameraId}") {
         fun createRoute(cameraId: Long) = "camera/$cameraId"
     }
     object Import : Screen("import")
+    object EventPreview : Screen("import/preview/{eventIndex}") {
+        fun createRoute(eventIndex: Int) = "import/preview/$eventIndex"
+    }
 }
 
 /**
@@ -156,6 +165,18 @@ fun NavGraph(
                 },
                 onViewTutorial = {
                     navController.navigate(Screen.Onboarding.route)
+                },
+                onViewTheory = {
+                    navController.navigate(Screen.Theory.route)
+                }
+            )
+        }
+
+        // Theory screen
+        composable(route = Screen.Theory.route) {
+            TheoryScreen(
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }
@@ -192,17 +213,54 @@ fun NavGraph(
         }
 
         // Import screen
-        composable(route = Screen.Import.route) {
+        composable(route = Screen.Import.route) { backStackEntry ->
+            val importViewModel: ImportViewModel = hiltViewModel(backStackEntry)
             ImportScreen(
                 onBackClick = {
                     navController.popBackStack()
                 },
                 onComplete = { sessionId ->
-                    navController.navigate(Screen.Results.createRoute(sessionId)) {
+                    // Navigate to EventReview so user can review/edit frames before results
+                    navController.navigate(Screen.EventReview.createRoute(sessionId)) {
                         popUpTo(Screen.Home.route)
                     }
-                }
+                },
+                onEventClick = { eventIndex ->
+                    navController.navigate(Screen.EventPreview.createRoute(eventIndex))
+                },
+                viewModel = importViewModel
+            )
+        }
+
+        // Event preview screen (during import)
+        composable(
+            route = Screen.EventPreview.route,
+            arguments = listOf(navArgument("eventIndex") { type = NavType.IntType })
+        ) { backStackEntry ->
+            val eventIndex = backStackEntry.arguments?.getInt("eventIndex") ?: return@composable
+
+            // Get the shared ImportViewModel from the Import screen's backstack entry
+            val importBackStackEntry = navController.getBackStackEntry(Screen.Import.route)
+            val importViewModel: ImportViewModel = hiltViewModel(importBackStackEntry)
+
+            // Get FrameExtractor
+            val frameExtractor: FrameExtractor = hiltViewModel<EventPreviewViewModelHelper>().frameExtractor
+
+            EventPreviewScreen(
+                eventIndex = eventIndex,
+                importViewModel = importViewModel,
+                frameExtractor = frameExtractor,
+                onBackClick = { navController.popBackStack() },
+                onDeleteEvent = { navController.popBackStack() }
             )
         }
     }
 }
+
+/**
+ * Helper ViewModel to inject FrameExtractor for EventPreviewScreen.
+ */
+@dagger.hilt.android.lifecycle.HiltViewModel
+class EventPreviewViewModelHelper @javax.inject.Inject constructor(
+    val frameExtractor: FrameExtractor
+) : androidx.lifecycle.ViewModel()

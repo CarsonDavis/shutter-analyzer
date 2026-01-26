@@ -179,20 +179,6 @@ fun RecordingScreen(
                     totalSpeeds = state.total,
                     fps = recordingFps,
                     brightness = currentBrightness,
-                    zoomRatio = zoomRatio,
-                    minZoomRatio = minZoomRatio,
-                    maxZoomRatio = maxZoomRatio,
-                    onZoomChange = viewModel::setZoom,
-                    isAutoFocus = isAutoFocus,
-                    focusDistance = focusDistance,
-                    onAutoFocusClick = {
-                        if (isAutoFocus) {
-                            viewModel.enableManualFocus()
-                        } else {
-                            viewModel.enableAutoFocus()
-                        }
-                    },
-                    onFocusChange = viewModel::setManualFocus,
                     onRedo = viewModel::redoLastEvent,
                     onSkip = viewModel::skipSpeed,
                     onDone = viewModel::finishEarly
@@ -576,203 +562,98 @@ private fun WaitingForShutterOverlay(
     totalSpeeds: Int,
     fps: Int,
     brightness: Double,
-    zoomRatio: Float,
-    minZoomRatio: Float,
-    maxZoomRatio: Float,
-    onZoomChange: (Float) -> Unit,
-    isAutoFocus: Boolean,
-    focusDistance: Float,
-    onAutoFocusClick: () -> Unit,
-    onFocusChange: (Float) -> Unit,
     onRedo: () -> Unit,
     onSkip: () -> Unit,
     onDone: () -> Unit
 ) {
-    Box(modifier = Modifier.fillMaxSize()) {
-        Column(
-            modifier = Modifier.fillMaxSize()
+    Column(
+        modifier = Modifier.fillMaxSize()
+    ) {
+        // Header
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            // Header
-            Row(
+            Text(
+                text = "${fps}fps",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White
+            )
+            Text(
+                text = "${currentIndex + 1} of $totalSpeeds",
+                style = MaterialTheme.typography.labelLarge,
+                color = Color.White
+            )
+        }
+
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Speed prompt
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 32.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color.Black.copy(alpha = 0.8f)
+            )
+        ) {
+            Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "${fps}fps",
-                    style = MaterialTheme.typography.labelLarge,
+                    text = speed,
+                    style = MaterialTheme.typography.displayMedium,
+                    fontWeight = FontWeight.Bold,
                     color = Color.White
                 )
+                Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "${currentIndex + 1} of $totalSpeeds",
-                    style = MaterialTheme.typography.labelLarge,
-                    color = Color.White,
-                    modifier = Modifier.padding(end = 100.dp) // Leave room for sliders
+                    text = "Fire shutter now",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color.White.copy(alpha = 0.7f)
                 )
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Speed prompt
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 32.dp, end = 100.dp), // Leave room for sliders
-                colors = CardDefaults.cardColors(
-                    containerColor = Color.Black.copy(alpha = 0.8f)
-                )
-            ) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = speed,
-                        style = MaterialTheme.typography.displayMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        text = "Fire shutter now",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = Color.White.copy(alpha = 0.7f)
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.weight(1f))
-
-            // Bottom controls
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceEvenly
-            ) {
-                OutlinedButton(
-                    onClick = onRedo,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Redo last measurement")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Redo")
-                }
-
-                OutlinedButton(
-                    onClick = onSkip,
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
-                ) {
-                    Icon(Icons.Default.SkipNext, contentDescription = "Skip this speed")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Skip")
-                }
-
-                Button(onClick = onDone) {
-                    Icon(Icons.Default.Stop, contentDescription = "Finish recording")
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text("Done")
-                }
             }
         }
 
-        // Vertical sliders on the right side
+        Spacer(modifier = Modifier.weight(1f))
+
+        // Bottom controls
         Row(
             modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.6f))
+                .padding(16.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly
         ) {
-            // Focus slider (left of zoom)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(12.dp)
+            OutlinedButton(
+                onClick = onRedo,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
             ) {
-                // Autofocus icon
-                IconButton(
-                    onClick = onAutoFocusClick,
-                    modifier = Modifier.size(44.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.CenterFocusStrong,
-                        contentDescription = if (isAutoFocus) "Autofocus enabled" else "Enable autofocus",
-                        tint = if (isAutoFocus) MaterialTheme.colorScheme.primary else Color.White,
-                        modifier = Modifier.size(28.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "Far",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-
-                // Vertical focus slider
-                VerticalSlider(
-                    value = focusDistance,
-                    onValueChange = onFocusChange,
-                    valueRange = 0f..1f,
-                    enabled = !isAutoFocus,
-                    modifier = Modifier
-                        .width(44.dp)
-                        .height(200.dp)
-                )
-
-                Text(
-                    text = "Near",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+                Icon(Icons.Default.Refresh, contentDescription = "Redo last measurement")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Redo")
             }
 
-            // Zoom slider (far right)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(12.dp)
+            OutlinedButton(
+                onClick = onSkip,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White)
             ) {
-                Icon(
-                    imageVector = Icons.Default.ZoomIn,
-                    contentDescription = "Zoom control",
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
+                Icon(Icons.Default.SkipNext, contentDescription = "Skip this speed")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Skip")
+            }
 
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "${maxZoomRatio.toInt()}x",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-
-                // Vertical zoom slider
-                VerticalSlider(
-                    value = zoomRatio,
-                    onValueChange = onZoomChange,
-                    valueRange = minZoomRatio..maxZoomRatio,
-                    modifier = Modifier
-                        .width(44.dp)
-                        .height(200.dp)
-                )
-
-                Text(
-                    text = "1x",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+            Button(onClick = onDone) {
+                Icon(Icons.Default.Stop, contentDescription = "Finish recording")
+                Spacer(modifier = Modifier.width(4.dp))
+                Text("Done")
             }
         }
     }
@@ -961,14 +842,6 @@ private fun WaitingForShutterOverlayPreview() {
             totalSpeeds = 11,
             fps = 240,
             brightness = 50.0,
-            zoomRatio = 1f,
-            minZoomRatio = 1f,
-            maxZoomRatio = 10f,
-            onZoomChange = {},
-            isAutoFocus = true,
-            focusDistance = 0.5f,
-            onAutoFocusClick = {},
-            onFocusChange = {},
             onRedo = {},
             onSkip = {},
             onDone = {}

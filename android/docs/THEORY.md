@@ -186,6 +186,19 @@ The algorithm assumes constant lighting:
 
 **Best practice:** Use steady DC lighting (incandescent, constant LED panels).
 
+### Auto-Exposure Lock
+
+The Android app automatically locks the camera's auto-exposure (AE) when detection begins:
+- Prevents brightness fluctuations from the phone adjusting exposure
+- Ensures consistent brightness readings throughout the session
+- Uses Camera2 API's `CONTROL_AE_LOCK = true`
+- Unlocks when recording stops to restore normal camera behavior
+
+This is critical because without AE lock, the phone's camera might:
+- Brighten the image when it sees a dark shutter
+- Darken when the shutter opens
+- Cause false triggers or missed events due to shifting baseline
+
 ### Accuracy Expectations
 
 | Recording FPS | Best Accuracy |

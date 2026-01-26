@@ -13,6 +13,7 @@ import com.shutteranalyzer.data.video.FrameExtractor
 import com.shutteranalyzer.domain.model.TestSession
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,6 +24,16 @@ import javax.inject.Inject
 private const val TAG = "EventReviewViewModel"
 
 /**
+ * Manual state override for frame classification.
+ * Allows users to override the automatic brightness-based classification.
+ */
+enum class FrameState {
+    FULL,      // Fully open shutter - weight = 1.0, included
+    PARTIAL,   // Transitioning shutter - weight = 0.5, included
+    EXCLUDED   // Excluded from calculation - not included
+}
+
+/**
  * Represents a frame in an event for display.
  */
 data class FrameInfo(
@@ -31,7 +42,8 @@ data class FrameInfo(
     val isIncluded: Boolean,
     val weight: Double,  // 0.0-1.0, where 1.0 is full brightness
     val isContext: Boolean = false,  // True for before/after context frames
-    val thumbnail: Bitmap? = null  // Actual frame thumbnail from video
+    val thumbnail: Bitmap? = null,  // Actual frame thumbnail from video
+    val manualState: FrameState? = null  // User override, null means use automatic classification
 )
 
 /**
@@ -82,9 +94,32 @@ class EventReviewViewModel @Inject constructor(
     val currentEventIndex: StateFlow<Int> = _currentEventIndex.asStateFlow()
 
     /**
-     * Frame inclusion state (mutable by user).
+     * Frame state overrides (mutable by user).
+     * Key is (eventIndex, frameIndex), value is the manual state.
      */
-    private val frameInclusions = mutableMapOf<Pair<Int, Int>, Boolean>()
+    private val frameStateOverrides = mutableMapOf<Pair<Int, Int>, FrameState>()
+
+    /**
+     * Track which events have thumbnails loaded.
+     */
+    private val loadedEventIndices = mutableSetOf<Int>()
+
+    /**
+     * Cache of thumbnails per event index.
+     * Used for LRU eviction when memory limit exceeded.
+     */
+    private val eventThumbnailCache = mutableMapOf<Int, Map<Int, Bitmap>>()
+
+    /**
+     * Background prefetch job - cancelled when user navigates.
+     */
+    private var prefetchJob: Job? = null
+
+    /**
+     * Cached video URI and session for frame extraction.
+     */
+    private var cachedVideoUri: Uri? = null
+    private var cachedSession: TestSession? = null
 
     init {
         loadSession()
@@ -99,17 +134,21 @@ class EventReviewViewModel @Inject constructor(
             loadedSession?.let { session ->
                 Log.d(TAG, "Session loaded: events=${session.events.size}, videoUri=${session.videoUri}")
 
+                // Cache session and video URI for lazy loading
+                cachedSession = session
+                cachedVideoUri = session.videoUri?.let { Uri.parse(it) }
+
                 // Create initial review events without thumbnails
                 val reviewEvents = session.events.mapIndexed { index, event ->
                     createReviewEvent(index, event, session.recordingFps, emptyMap())
                 }
                 _events.value = reviewEvents
 
-                // Extract thumbnails in background if video URI is available
-                if (session.videoUri != null) {
-                    Log.d(TAG, "Extracting thumbnails from: ${session.videoUri}")
-                    extractThumbnails(Uri.parse(session.videoUri), session)
-                } else {
+                // Load thumbnails for event 0 ONLY (fast initial load)
+                if (cachedVideoUri != null && session.events.isNotEmpty()) {
+                    Log.d(TAG, "Loading thumbnails for event 0 only (lazy loading)")
+                    loadThumbnailsForEvent(0)
+                } else if (session.videoUri == null) {
                     Log.w(TAG, "No video URI available for session $sessionId")
                 }
             } ?: run {
@@ -119,62 +158,215 @@ class EventReviewViewModel @Inject constructor(
     }
 
     /**
-     * Extract thumbnails for event frames from the video.
-     * Limits extraction to key frames to avoid performance issues.
+     * Load thumbnails for a specific event only.
+     * This is the core of lazy loading - extracts frames for just one event.
      */
-    private suspend fun extractThumbnails(videoUri: Uri, session: TestSession) {
+    private fun loadThumbnailsForEvent(eventIndex: Int) {
+        val session = cachedSession ?: return
+        val videoUri = cachedVideoUri ?: return
+
+        if (eventIndex !in session.events.indices) return
+        if (loadedEventIndices.contains(eventIndex)) {
+            Log.d(TAG, "Event $eventIndex already loaded, skipping extraction")
+            // Still prefetch adjacent events
+            prefetchAdjacentEvents(eventIndex)
+            return
+        }
+
+        Log.d(TAG, "Loading thumbnails for event $eventIndex")
         _isLoadingThumbnails.value = true
 
-        withContext(Dispatchers.IO) {
-            // Collect frame numbers we need - limit per event to avoid extracting thousands
-            val allFrameNumbers = mutableListOf<Int>()
+        viewModelScope.launch(Dispatchers.IO) {
+            val event = session.events[eventIndex]
 
-            session.events.forEach { event ->
-                // Context frames before (2)
-                allFrameNumbers.add(event.startFrame - 2)
-                allFrameNumbers.add(event.startFrame - 1)
+            // Collect frame numbers for this single event
+            val frameNumbers = mutableListOf<Int>()
 
-                // Event frames - sample if too many
-                // Use brightnessValues.size for consistency with createReviewEvent
-                val eventFrameCount = event.brightnessValues.size
-                if (eventFrameCount <= MAX_FRAMES_PER_EVENT) {
-                    // Show all frames
-                    for (i in 0 until eventFrameCount) {
-                        allFrameNumbers.add(event.startFrame + i)
-                    }
-                } else {
-                    // Sample frames: evenly spaced
-                    val step = eventFrameCount.toDouble() / (MAX_FRAMES_PER_EVENT - 1)
-                    for (i in 0 until MAX_FRAMES_PER_EVENT) {
-                        val frameIdx = (i * step).toInt().coerceAtMost(eventFrameCount - 1)
-                        allFrameNumbers.add(event.startFrame + frameIdx)
-                    }
+            // Context frames before (2)
+            frameNumbers.add(event.startFrame - 2)
+            frameNumbers.add(event.startFrame - 1)
+
+            // Event frames - sample if too many
+            val eventFrameCount = event.brightnessValues.size
+            if (eventFrameCount <= MAX_FRAMES_PER_EVENT) {
+                for (i in 0 until eventFrameCount) {
+                    frameNumbers.add(event.startFrame + i)
                 }
-
-                // Context frames after (2)
-                allFrameNumbers.add(event.endFrame + 1)
-                allFrameNumbers.add(event.endFrame + 2)
+            } else {
+                val step = eventFrameCount.toDouble() / (MAX_FRAMES_PER_EVENT - 1)
+                for (i in 0 until MAX_FRAMES_PER_EVENT) {
+                    val frameIdx = (i * step).toInt().coerceAtMost(eventFrameCount - 1)
+                    frameNumbers.add(event.startFrame + frameIdx)
+                }
             }
 
-            Log.d(TAG, "Extracting ${allFrameNumbers.size} frames for ${session.events.size} events")
+            // Context frames after (2)
+            frameNumbers.add(event.endFrame + 1)
+            frameNumbers.add(event.endFrame + 2)
 
-            // Extract thumbnails
+            Log.d(TAG, "Extracting ${frameNumbers.size} frames for event $eventIndex")
+
             val thumbnails = frameExtractor.extractFrames(
                 videoUri = videoUri,
-                frameNumbers = allFrameNumbers.filter { it >= 0 }.distinct(),
+                frameNumbers = frameNumbers.filter { it >= 0 }.distinct(),
                 fps = session.recordingFps,
                 thumbnailWidth = 160
             )
 
-            Log.d(TAG, "Extracted ${thumbnails.size} thumbnails")
+            Log.d(TAG, "Extracted ${thumbnails.size} thumbnails for event $eventIndex")
 
-            // Update events with thumbnails
+            // Update state on main thread
             withContext(Dispatchers.Main) {
-                val updatedEvents = session.events.mapIndexed { index, event ->
-                    createReviewEvent(index, event, session.recordingFps, thumbnails)
-                }
-                _events.value = updatedEvents
+                // Cache thumbnails for this event
+                eventThumbnailCache[eventIndex] = thumbnails
+                loadedEventIndices.add(eventIndex)
+
+                // Evict old events if over memory limit
+                evictOldEvents(eventIndex)
+
+                // Update just this event with thumbnails
+                updateEventWithThumbnails(eventIndex, thumbnails)
+
                 _isLoadingThumbnails.value = false
+
+                // Start prefetching adjacent events
+                prefetchAdjacentEvents(eventIndex)
+            }
+        }
+    }
+
+    /**
+     * Update a single event with its thumbnails.
+     */
+    private fun updateEventWithThumbnails(eventIndex: Int, thumbnails: Map<Int, Bitmap>) {
+        val session = cachedSession ?: return
+        if (eventIndex !in session.events.indices) return
+
+        val currentEvents = _events.value.toMutableList()
+        if (eventIndex in currentEvents.indices) {
+            val event = session.events[eventIndex]
+            currentEvents[eventIndex] = createReviewEvent(
+                eventIndex, event, session.recordingFps, thumbnails
+            )
+            _events.value = currentEvents
+        }
+    }
+
+    /**
+     * Prefetch adjacent events in background.
+     * Prioritizes next event, then previous event.
+     */
+    private fun prefetchAdjacentEvents(currentIndex: Int) {
+        val session = cachedSession ?: return
+
+        // Cancel any existing prefetch job
+        prefetchJob?.cancel()
+
+        prefetchJob = viewModelScope.launch(Dispatchers.IO) {
+            // Prefetch next event (priority)
+            val nextIndex = currentIndex + 1
+            if (nextIndex in session.events.indices && !loadedEventIndices.contains(nextIndex)) {
+                Log.d(TAG, "Prefetching event $nextIndex")
+                prefetchEvent(nextIndex)
+            }
+
+            // Prefetch previous event (lower priority)
+            val prevIndex = currentIndex - 1
+            if (prevIndex >= 0 && !loadedEventIndices.contains(prevIndex)) {
+                Log.d(TAG, "Prefetching event $prevIndex")
+                prefetchEvent(prevIndex)
+            }
+        }
+    }
+
+    /**
+     * Prefetch a single event's thumbnails (called from background thread).
+     */
+    private suspend fun prefetchEvent(eventIndex: Int) {
+        val session = cachedSession ?: return
+        val videoUri = cachedVideoUri ?: return
+
+        if (eventIndex !in session.events.indices) return
+        if (loadedEventIndices.contains(eventIndex)) return
+
+        val event = session.events[eventIndex]
+
+        // Collect frame numbers
+        val frameNumbers = mutableListOf<Int>()
+        frameNumbers.add(event.startFrame - 2)
+        frameNumbers.add(event.startFrame - 1)
+
+        val eventFrameCount = event.brightnessValues.size
+        if (eventFrameCount <= MAX_FRAMES_PER_EVENT) {
+            for (i in 0 until eventFrameCount) {
+                frameNumbers.add(event.startFrame + i)
+            }
+        } else {
+            val step = eventFrameCount.toDouble() / (MAX_FRAMES_PER_EVENT - 1)
+            for (i in 0 until MAX_FRAMES_PER_EVENT) {
+                val frameIdx = (i * step).toInt().coerceAtMost(eventFrameCount - 1)
+                frameNumbers.add(event.startFrame + frameIdx)
+            }
+        }
+
+        frameNumbers.add(event.endFrame + 1)
+        frameNumbers.add(event.endFrame + 2)
+
+        val thumbnails = frameExtractor.extractFrames(
+            videoUri = videoUri,
+            frameNumbers = frameNumbers.filter { it >= 0 }.distinct(),
+            fps = session.recordingFps,
+            thumbnailWidth = 160
+        )
+
+        // Update on main thread
+        withContext(Dispatchers.Main) {
+            // Check again in case it was loaded while we were extracting
+            if (!loadedEventIndices.contains(eventIndex)) {
+                eventThumbnailCache[eventIndex] = thumbnails
+                loadedEventIndices.add(eventIndex)
+                evictOldEvents(eventIndex)
+                updateEventWithThumbnails(eventIndex, thumbnails)
+                Log.d(TAG, "Prefetch complete for event $eventIndex")
+            }
+        }
+    }
+
+    /**
+     * Evict old events from memory when over the limit.
+     * Keeps events closest to current index.
+     */
+    private fun evictOldEvents(currentIndex: Int) {
+        if (loadedEventIndices.size <= MAX_EVENTS_IN_MEMORY) return
+
+        // Sort loaded events by distance from current
+        val sortedByDistance = loadedEventIndices
+            .sortedBy { kotlin.math.abs(it - currentIndex) }
+
+        // Keep closest MAX_EVENTS_IN_MEMORY, evict the rest
+        val toKeep = sortedByDistance.take(MAX_EVENTS_IN_MEMORY).toSet()
+        val toEvict = loadedEventIndices - toKeep
+
+        for (idx in toEvict) {
+            Log.d(TAG, "Evicting thumbnails for event $idx (too far from current $currentIndex)")
+            // Recycle bitmaps
+            eventThumbnailCache[idx]?.values?.forEach { bitmap ->
+                if (!bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
+            }
+            eventThumbnailCache.remove(idx)
+            loadedEventIndices.remove(idx)
+
+            // Clear thumbnails from the event in state
+            val session = cachedSession ?: continue
+            if (idx in session.events.indices) {
+                val currentEvents = _events.value.toMutableList()
+                if (idx in currentEvents.indices) {
+                    val event = session.events[idx]
+                    currentEvents[idx] = createReviewEvent(idx, event, session.recordingFps, emptyMap())
+                    _events.value = currentEvents
+                }
             }
         }
     }
@@ -182,6 +374,9 @@ class EventReviewViewModel @Inject constructor(
     companion object {
         /** Maximum frames to show per event in review screen */
         private const val MAX_FRAMES_PER_EVENT = 12
+
+        /** Maximum events to keep thumbnails in memory (LRU eviction) */
+        private const val MAX_EVENTS_IN_MEMORY = 5
     }
 
     private fun createReviewEvent(
@@ -209,15 +404,23 @@ class EventReviewViewModel @Inject constructor(
 
         val frames = frameIndices.map { frameIdx ->
             val brightness = event.brightnessValues[frameIdx]
-            val weight = if (range > 0) {
+            val autoWeight = if (range > 0) {
                 ((brightness - baseline) / range).coerceIn(0.0, 1.0)
             } else {
                 1.0
             }
 
             val key = index to frameIdx
-            val isIncluded = frameInclusions[key] ?: true
+            val manualState = frameStateOverrides[key]
             val frameNumber = event.startFrame + frameIdx
+
+            // Apply manual state override if set
+            val (weight, isIncluded) = when (manualState) {
+                FrameState.FULL -> 1.0 to true
+                FrameState.PARTIAL -> 0.5 to true
+                FrameState.EXCLUDED -> 0.0 to false
+                null -> autoWeight to true  // Use automatic classification
+            }
 
             FrameInfo(
                 frameNumber = frameNumber,
@@ -225,47 +428,60 @@ class EventReviewViewModel @Inject constructor(
                 isIncluded = isIncluded,
                 weight = weight,
                 isContext = false,
-                thumbnail = thumbnails[frameNumber]
+                thumbnail = thumbnails[frameNumber],
+                manualState = manualState
             )
         }
 
-        // Add context frames (2 before and 2 after)
-        val contextBefore = listOf(
+        // Add context frames (2 before and 2 after) - also support manual state override
+        val contextBeforeIndices = listOf(-2, -1)
+        val contextAfterIndices = listOf(frameIndices.size, frameIndices.size + 1)
+
+        val contextBefore = contextBeforeIndices.mapIndexed { idx, offset ->
+            val contextKey = index to (-(idx + 1))  // Use negative indices for context before
+            val contextManualState = frameStateOverrides[contextKey]
+            val frameNumber = event.startFrame + offset
+
+            val (weight, isIncluded) = when (contextManualState) {
+                FrameState.FULL -> 1.0 to true
+                FrameState.PARTIAL -> 0.5 to true
+                FrameState.EXCLUDED -> 0.0 to false
+                null -> 0.0 to false  // Context frames excluded by default
+            }
+
             FrameInfo(
-                frameNumber = event.startFrame - 2,
+                frameNumber = frameNumber,
                 brightness = baseline,
-                isIncluded = false,
-                weight = 0.0,
+                isIncluded = isIncluded,
+                weight = weight,
                 isContext = true,
-                thumbnail = thumbnails[event.startFrame - 2]
-            ),
-            FrameInfo(
-                frameNumber = event.startFrame - 1,
-                brightness = baseline,
-                isIncluded = false,
-                weight = 0.0,
-                isContext = true,
-                thumbnail = thumbnails[event.startFrame - 1]
+                thumbnail = thumbnails[frameNumber],
+                manualState = contextManualState
             )
-        )
-        val contextAfter = listOf(
+        }
+
+        val contextAfter = contextAfterIndices.mapIndexed { idx, frameListIdx ->
+            val contextKey = index to (1000 + idx)  // Use large indices for context after
+            val contextManualState = frameStateOverrides[contextKey]
+            val frameNumber = event.endFrame + 1 + idx
+
+            val (weight, isIncluded) = when (contextManualState) {
+                FrameState.FULL -> 1.0 to true
+                FrameState.PARTIAL -> 0.5 to true
+                FrameState.EXCLUDED -> 0.0 to false
+                null -> 0.0 to false  // Context frames excluded by default
+            }
+
             FrameInfo(
-                frameNumber = event.endFrame + 1,
+                frameNumber = frameNumber,
                 brightness = baseline,
-                isIncluded = false,
-                weight = 0.0,
+                isIncluded = isIncluded,
+                weight = weight,
                 isContext = true,
-                thumbnail = thumbnails[event.endFrame + 1]
-            ),
-            FrameInfo(
-                frameNumber = event.endFrame + 2,
-                brightness = baseline,
-                isIncluded = false,
-                weight = 0.0,
-                isContext = true,
-                thumbnail = thumbnails[event.endFrame + 2]
+                thumbnail = thumbnails[frameNumber],
+                manualState = contextManualState
             )
-        )
+        }
 
         // Use stored expected speed, or calculate from duration as fallback
         val expectedSpeed = event.expectedSpeed
@@ -286,7 +502,16 @@ class EventReviewViewModel @Inject constructor(
     fun nextEvent() {
         val events = _events.value
         if (_currentEventIndex.value < events.size - 1) {
-            _currentEventIndex.value++
+            val newIndex = _currentEventIndex.value + 1
+            _currentEventIndex.value = newIndex
+
+            // Load thumbnails if not already loaded
+            if (!loadedEventIndices.contains(newIndex)) {
+                loadThumbnailsForEvent(newIndex)
+            } else {
+                // Already loaded, just trigger prefetch for adjacent events
+                prefetchAdjacentEvents(newIndex)
+            }
         }
     }
 
@@ -295,26 +520,104 @@ class EventReviewViewModel @Inject constructor(
      */
     fun previousEvent() {
         if (_currentEventIndex.value > 0) {
-            _currentEventIndex.value--
+            val newIndex = _currentEventIndex.value - 1
+            _currentEventIndex.value = newIndex
+
+            // Load thumbnails if not already loaded
+            if (!loadedEventIndices.contains(newIndex)) {
+                loadThumbnailsForEvent(newIndex)
+            } else {
+                // Already loaded, just trigger prefetch for adjacent events
+                prefetchAdjacentEvents(newIndex)
+            }
         }
     }
 
     /**
-     * Toggle frame inclusion for the current event.
+     * Cycle frame state for the specified frame index.
+     * Cycles through: FULL → PARTIAL → EXCLUDED → FULL (back to auto if context)
+     *
+     * For context frames (initially excluded), cycles: FULL → PARTIAL → EXCLUDED (back to default)
+     * For event frames (initially auto), cycles based on current state.
      */
-    fun toggleFrameInclusion(frameIndex: Int) {
+    fun cycleFrameState(frameIndex: Int) {
         val eventIndex = _currentEventIndex.value
-        val key = eventIndex to frameIndex
-        frameInclusions[key] = !(frameInclusions[key] ?: true)
-
-        // Refresh the events list
         val currentEvents = _events.value.toMutableList()
+        if (eventIndex !in currentEvents.indices) return
+
         val currentEvent = currentEvents[eventIndex]
-        val updatedFrames = currentEvent.frames.mapIndexed { idx, frame ->
-            if (idx == frameIndex && !frame.isContext) {
-                frame.copy(isIncluded = frameInclusions[key] ?: true)
+        if (frameIndex !in currentEvent.frames.indices) return
+
+        val frame = currentEvent.frames[frameIndex]
+
+        // Determine the storage key based on whether it's a context frame
+        // Context frames use special indices: negative for before, 1000+ for after
+        val storageKey = when {
+            frame.isContext && frameIndex < 2 -> eventIndex to (-(frameIndex + 1))  // Context before
+            frame.isContext -> eventIndex to (1000 + (frameIndex - currentEvent.frames.size + 2))  // Context after
+            else -> eventIndex to (frameIndex - 2)  // Regular frames (offset by 2 context frames before)
+        }
+
+        // Determine current state and next state
+        val currentState = frame.manualState
+
+        // Determine the automatic state for non-context frames
+        val autoState = when {
+            frame.isContext -> null  // Context frames have no auto state
+            frame.weight >= 0.95 -> FrameState.FULL
+            frame.weight >= 0.5 -> FrameState.PARTIAL
+            else -> FrameState.EXCLUDED
+        }
+
+        // Cycle to next state
+        val nextState = when (currentState) {
+            null -> FrameState.FULL  // From auto/default -> FULL
+            FrameState.FULL -> FrameState.PARTIAL
+            FrameState.PARTIAL -> FrameState.EXCLUDED
+            FrameState.EXCLUDED -> {
+                // For context frames, cycle back to FULL
+                // For regular frames, go back to auto (null) if different from FULL, else stay at FULL
+                if (frame.isContext) {
+                    FrameState.FULL
+                } else if (autoState == FrameState.FULL) {
+                    FrameState.PARTIAL  // Skip auto since it's the same as FULL
+                } else {
+                    null  // Return to auto
+                }
+            }
+        }
+
+        // Update the override map
+        if (nextState == null) {
+            frameStateOverrides.remove(storageKey)
+        } else {
+            frameStateOverrides[storageKey] = nextState
+        }
+
+        // Apply the new state to the frame
+        val (newWeight, newIsIncluded) = when (nextState) {
+            FrameState.FULL -> 1.0 to true
+            FrameState.PARTIAL -> 0.5 to true
+            FrameState.EXCLUDED -> 0.0 to false
+            null -> {
+                // Return to automatic classification
+                if (frame.isContext) {
+                    0.0 to false
+                } else {
+                    frame.weight to true  // Original auto weight
+                }
+            }
+        }
+
+        val updatedFrames = currentEvent.frames.mapIndexed { idx, f ->
+            if (idx == frameIndex) {
+                f.copy(
+                    isIncluded = newIsIncluded,
+                    weight = newWeight,
+                    manualState = nextState
+                )
             } else {
-                frame
+                f
             }
         }
         currentEvents[eventIndex] = currentEvent.copy(frames = updatedFrames)
@@ -336,5 +639,26 @@ class EventReviewViewModel @Inject constructor(
         val events = _events.value
         val index = _currentEventIndex.value
         return if (index in events.indices) events[index] else null
+    }
+
+    /**
+     * Clean up resources when ViewModel is destroyed.
+     */
+    override fun onCleared() {
+        super.onCleared()
+        prefetchJob?.cancel()
+
+        // Recycle all cached bitmaps
+        eventThumbnailCache.values.forEach { thumbnails ->
+            thumbnails.values.forEach { bitmap ->
+                if (!bitmap.isRecycled) {
+                    bitmap.recycle()
+                }
+            }
+        }
+        eventThumbnailCache.clear()
+        loadedEventIndices.clear()
+
+        Log.d(TAG, "EventReviewViewModel cleared, bitmaps recycled")
     }
 }
