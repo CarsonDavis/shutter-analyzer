@@ -1,7 +1,7 @@
 # Shutter Analyzer - Android Wireframes
 
-**Status**: In Progress
-**Last Updated**: 2025-01-25
+**Status**: Complete
+**Last Updated**: 2025-01-31
 
 These wireframes represent the screen layouts for the Android app. All screens assume a standard mobile portrait orientation.
 
@@ -864,6 +864,96 @@ These wireframes represent the screen layouts for the Android app. All screens a
 │  └─────────────────────────┘    │
 │                                 │
 │                                 │
+│                                 │
+└─────────────────────────────────┘
+```
+
+---
+
+## 5.11 Theory Screen
+
+```
+┌─────────────────────────────────┐
+│ ░░░░░░░░ STATUS BAR ░░░░░░░░░░  │
+├─────────────────────────────────┤
+│  [←]    HOW IT WORKS            │
+├─────────────────────────────────┤
+│                                 │
+│   WHAT IS SHUTTER SPEED?        │
+│                                 │
+│   Shutter speed is the length   │
+│   of time a camera's shutter    │
+│   remains open during an        │
+│   exposure...                   │
+│                                 │
+│   • 1/500 second - Fast         │
+│   • 1/60 second - Standard      │
+│   • 1/4 second - Slow           │
+│                                 │
+├─────────────────────────────────┤
+│                                 │
+│   WHY MEASURE SHUTTER SPEED?    │
+│                                 │
+│   Vintage film cameras with     │
+│   mechanical shutters can drift │
+│   from their calibrated speeds  │
+│   over time due to:             │
+│                                 │
+│   • Aging lubricants            │
+│   • Spring fatigue              │
+│   • Debris or corrosion         │
+│                                 │
+│   ...                           │
+│                                 │
+│   (scrollable content)          │
+│                                 │
+└─────────────────────────────────┘
+```
+
+---
+
+## 5.12 Event Preview Screen
+
+```
+┌─────────────────────────────────┐
+│ ░░░░░░░░ STATUS BAR ░░░░░░░░░░  │
+├─────────────────────────────────┤
+│  [←]    EVENT 3 PREVIEW         │
+├─────────────────────────────────┤
+│                                 │
+│   1/250                         │
+│   4 frames detected             │
+│                                 │
+├─────────────────────────────────┤
+│                                 │
+│   ┌────────────────────────┐    │
+│   │                        │    │
+│   │    Frame #1847         │    │
+│   │    Brightness: 187     │    │
+│   │                        │    │
+│   └────────────────────────┘    │
+│                                 │
+│   ┌────────────────────────┐    │
+│   │                        │    │
+│   │    Frame #1848         │    │
+│   │    Brightness: 245     │    │
+│   │                        │    │
+│   └────────────────────────┘    │
+│                                 │
+│   ┌────────────────────────┐    │
+│   │                        │    │
+│   │    Frame #1849         │    │
+│   │    Brightness: 242     │    │
+│   │                        │    │
+│   └────────────────────────┘    │
+│                                 │
+│   (scrollable)                  │
+│                                 │
+├─────────────────────────────────┤
+│                                 │
+│  ┌─────────────────────────┐    │
+│  │     DELETE EVENT        │    │
+│  └─────────────────────────┘    │
 │                                 │
 └─────────────────────────────────┘
 ```

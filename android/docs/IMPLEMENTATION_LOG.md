@@ -908,13 +908,13 @@ android/app/src/main/java/com/shutteranalyzer/
 ```
 
 ### Next Steps
-- ~~Phase 6: Visualization & Charts~~ ✅ Complete (see below)
-- Phase 7: Polish & Testing
+- Phase 6: Visualization & Charts ✅ Complete
+- Phase 7: Polish & Testing ✅ Complete
 - Phase 8: Publishing
 
 ---
 
-## 2025-01-25 - Phase 6: Visualization & Charts
+**Continued in [IMPLEMENTATION_LOG_2.md](IMPLEMENTATION_LOG_2.md)**
 
 ### Overview
 Added rich visualizations to the Results screen to help users understand their shutter speed measurements, matching the visual analysis provided by the Python CLI.

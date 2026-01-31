@@ -9,16 +9,7 @@ A Python tool for measuring actual camera shutter speeds from video recordings. 
 | [INDEX.md](INDEX.md) | This file - project overview and file index |
 | [instructions.md](instructions.md) | Claude Code instructions for working on this repo |
 | [REQUIREMENTS.md](REQUIREMENTS.md) | Functional and documentation requirements (CLI tool) |
-| [android/docs/APP_SPEC.md](android/docs/APP_SPEC.md) | **Android app specification** - screens, flows, requirements |
-| [android/docs/WIREFRAMES.md](android/docs/WIREFRAMES.md) | **Android wireframes** - ASCII mockups for all screens |
-| [android/docs/TECH_STACK.md](android/docs/TECH_STACK.md) | **Android tech stack** - Kotlin, Compose, CameraX, Room, etc. |
-| [android/docs/IMPLEMENTATION_PLAN.md](android/docs/IMPLEMENTATION_PLAN.md) | **Android implementation plan** - phases, porting guide, code examples |
-| [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) | **Android implementation log** - progress tracking |
-| [android/docs/BUILD.md](android/docs/BUILD.md) | **Android build guide** - how to build and run locally |
-| [android/docs/THEORY.md](android/docs/THEORY.md) | Theory of shutter speed measurement |
-| [android/docs/HOW_TO.md](android/docs/HOW_TO.md) | Step-by-step usage guide |
-| [android/docs/VIDEO_DECODER_DESIGN.md](android/docs/VIDEO_DECODER_DESIGN.md) | Video decoder optimization design |
-| [android/docs/EXPAND_FRAMES_FEATURE.md](android/docs/EXPAND_FRAMES_FEATURE.md) | Expandable frame boundaries feature spec |
+| [android/docs/INDEX.md](android/docs/INDEX.md) | **Android docs index** - explains when to use each Android doc |
 | [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Implementation instructions |
 | [IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md) | Implementation progress log |
 | [architecture.md](architecture.md) | API documentation and technical details |
@@ -43,14 +34,17 @@ shutter-analyzer/
 │   ├── build.gradle.kts           # Root build file
 │   ├── gradle.properties          # Gradle configuration
 │   ├── docs/                      # Android documentation
+│   │   ├── INDEX.md               # Docs index - start here
+│   │   ├── CLI_QUICKSTART.md      # Quick build/debug commands
+│   │   ├── BUILD.md               # Full build guide
 │   │   ├── APP_SPEC.md            # App specification
 │   │   ├── WIREFRAMES.md          # Screen mockups
 │   │   ├── TECH_STACK.md          # Technology decisions
-│   │   ├── IMPLEMENTATION_PLAN.md # Implementation phases
+│   │   ├── IMPLEMENTATION_PLAN.md # Python-to-Kotlin porting
 │   │   ├── IMPLEMENTATION_LOG.md  # Progress tracking
-│   │   ├── BUILD.md               # Build and run locally guide
 │   │   ├── THEORY.md              # Shutter measurement theory
-│   │   └── HOW_TO.md              # Usage guide
+│   │   ├── HOW_TO.md              # Usage guide
+│   │   └── (feature specs)        # VIDEO_DECODER_DESIGN, etc.
 │   └── app/
 │       ├── build.gradle.kts       # App build with dependencies
 │       └── src/
@@ -361,4 +355,5 @@ See [android/docs/IMPLEMENTATION_LOG.md](android/docs/IMPLEMENTATION_LOG.md) for
 | Phase 7.6 | Import Flow & Results Display | ✅ Complete |
 | Phase 7.7 | Event Preview Feature | ✅ Complete |
 | Phase 7.8 | Thumbnail Loading Optimization | ✅ Complete |
+| Phase 7.9 | UI/UX Improvements | ✅ Complete |
 | Phase 8 | Publishing | ⏳ Pending |

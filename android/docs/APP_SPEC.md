@@ -23,11 +23,13 @@ The existing Python CLI tool analyzes pre-recorded videos to detect shutter even
 | 5.3 | Recording Setup | Camera name, speed set selection |
 | 5.4 | Recording Screen | Live detection with speed prompts |
 | 5.5 | Event Review | Verify/correct detected frames |
-| 5.6 | Processing | Calculation progress |
+| 5.6 | Processing | Calculation progress (inline, not a screen) |
 | 5.7 | Results Dashboard | Rich visualizations |
 | 5.8 | Camera Detail | History of past sessions |
 | 5.9 | Import Flow | For existing videos |
 | 5.10 | Settings | App configuration |
+| 5.11 | Theory | Educational "How It Works" content |
+| 5.12 | Event Preview | Event detail view during import |
 
 ---
 
@@ -330,6 +332,41 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 - Detection sensitivity (advanced)
 - Reset tutorial
 - About / version info
+
+---
+
+### 5.11 Theory Screen
+**Purpose**: Educational content explaining how shutter measurement works
+
+**Content**:
+- What is Shutter Speed?
+- Why Measure Shutter Speed?
+- The Measurement Principle (high-speed video capture)
+- Brightness Analysis explanation
+- The Math (frame counting formula)
+- Intermediate Frame Weighting
+
+**Access**:
+- From Home screen help menu → "How It Works"
+- From Settings screen → "How It Works"
+
+---
+
+### 5.12 Event Preview Screen
+**Purpose**: View details of a single detected event during import
+
+**Elements**:
+- Event header (event number, assigned speed)
+- Frame thumbnails for all frames in the event
+- Brightness values for each frame
+- Delete event button
+
+**Access**:
+- Tap on any event card in Import screen
+
+**Actions**:
+- Delete event (removes from analysis)
+- Back to import screen
 
 ---
 

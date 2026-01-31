@@ -1,7 +1,7 @@
 # Shutter Analyzer - Android Tech Stack
 
 **Status**: Decided
-**Last Updated**: 2025-01-24
+**Last Updated**: 2025-01-31
 
 ---
 
@@ -343,7 +343,7 @@ fun ShutterAnalyzerNavHost(navController: NavHostController) {
 
 ```
 app/
-├── src/main/java/com/example/shutteranalyzer/
+├── src/main/java/com/shutteranalyzer/
 │   ├── ShutterAnalyzerApp.kt           # Application class
 │   ├── MainActivity.kt                  # Single activity
 │   │
@@ -414,32 +414,34 @@ app/
 ```kotlin
 dependencies {
     // Core
-    implementation("androidx.core:core-ktx:1.12.0")
-    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
 
     // Compose
-    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation(platform("androidx.compose:compose-bom:2024.12.01"))
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.compose.ui:ui-tooling-preview")
-    implementation("androidx.activity:activity-compose:1.8.2")
-    implementation("androidx.navigation:navigation-compose:2.7.7")
+    implementation("androidx.activity:activity-compose:1.9.3")
+    implementation("androidx.navigation:navigation-compose:2.8.5")
 
     // ViewModel
-    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
-    // Hilt
-    implementation("com.google.dagger:hilt-android:2.50")
-    kapt("com.google.dagger:hilt-compiler:2.50")
-    implementation("androidx.hilt:hilt-navigation-compose:1.1.0")
+    // Hilt (using KSP instead of kapt)
+    implementation("com.google.dagger:hilt-android:2.54")
+    ksp("com.google.dagger:hilt-compiler:2.54")
+    implementation("androidx.hilt:hilt-navigation-compose:1.2.0")
 
-    // Room
+    // Room (using KSP instead of kapt)
     implementation("androidx.room:room-runtime:2.6.1")
     implementation("androidx.room:room-ktx:2.6.1")
-    kapt("androidx.room:room-compiler:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
 
     // CameraX
-    val camerax_version = "1.3.1"
+    val camerax_version = "1.4.1"
     implementation("androidx.camera:camera-core:$camerax_version")
     implementation("androidx.camera:camera-camera2:$camerax_version")
     implementation("androidx.camera:camera-lifecycle:$camerax_version")
@@ -450,10 +452,12 @@ dependencies {
     implementation("org.opencv:opencv:4.9.0")
 
     // Coroutines
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
 
-    // Charts (for brightness timeline)
-    implementation("com.patrykandpatrick.vico:compose-m3:1.13.1")
+    // DataStore for settings
+    implementation("androidx.datastore:datastore-preferences:1.1.1")
+
+    // Charts: Custom Compose Canvas (no external library)
 }
 ```
 
@@ -464,8 +468,10 @@ dependencies {
 | Requirement | Value | Reason |
 |-------------|-------|--------|
 | Min SDK | 26 (Android 8.0) | Camera2 slow-motion APIs |
-| Target SDK | 34 (Android 14) | Play Store requirement |
-| Compile SDK | 34 | Latest stable |
+| Target SDK | 35 (Android 15) | Play Store requirement |
+| Compile SDK | 35 | Latest stable |
+| Kotlin | 2.1.0 | Latest stable with Compose plugin |
+| Gradle | 8.10.2 | Required for AGP 8.7+ |
 
 ---
 
