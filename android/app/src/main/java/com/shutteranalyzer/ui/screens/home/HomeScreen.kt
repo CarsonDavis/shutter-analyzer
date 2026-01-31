@@ -252,7 +252,7 @@ private fun BottomButtons(
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("NEW TEST")
+            Text("NEW CAMERA")
         }
 
         OutlinedButton(

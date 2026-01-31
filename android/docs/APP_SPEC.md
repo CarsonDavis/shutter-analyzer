@@ -2,7 +2,7 @@
 
 ## Document Status
 **Status**: Requirements Complete - Ready for Design/Development
-**Last Updated**: 2025-01-25
+**Last Updated**: 2026-01-31
 
 ---
 
@@ -126,14 +126,14 @@ Based on initial requirements gathering:
 
 **Elements**:
 - List of saved camera profiles (name, last tested date, quick status indicator)
-- "New Test" button (starts new session)
+- "New Camera" button (starts new camera + test session)
 - "Import Video" button (for existing slow-mo videos)
 - Help icon (?) with dropdown: Tutorial, How It Works
 - Settings gear icon
 
 **Actions**:
 - Tap camera → View camera detail/history
-- Tap "New Test" → Recording setup flow
+- Tap "New Camera" → Recording setup flow
 - Tap "Import" → File picker
 - Tap Help → Dropdown menu for Tutorial or Theory
 
@@ -265,10 +265,12 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 ### 5.7 Results Dashboard
 **Purpose**: Display test results with rich visualizations
 
+**Note**: Sessions are saved automatically when recording completes. Video files are automatically linked to their test sessions. There is no manual "save" step.
+
 **Sections**:
 
 **Header**:
-- Camera name (or "Unnamed Session")
+- Camera name
 - Test date/time
 - Overall accuracy summary (e.g., "Average: 5% deviation")
 
@@ -288,9 +290,9 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 - Visual representation of where camera runs fast/slow
 
 **Actions**:
-- "Save to Camera Profile" (if started as unnamed)
-- "Test Again" (new session, same camera)
-- "Back to Home"
+- "Test Again" (↺ icon) → New session for same camera
+- "Delete Test" (🗑️ icon, red) → Deletes session and associated video file (with confirmation)
+- Back navigation → Camera detail or home
 
 ---
 
@@ -305,8 +307,9 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 
 **Actions**:
 - Tap session → Results dashboard for that session
-- Delete camera (with confirmation)
-- Rename camera
+- "New Test" (↺ icon) → Start new test for this camera
+- "Delete Camera" (🗑️ icon, red) → Deletes camera, all sessions, and all associated video files (with confirmation)
+- Rename camera (edit icon in header)
 
 ---
 
@@ -372,12 +375,12 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 
 ## 6. User Flows
 
-### 6.1 Primary Flow: New Test Session
+### 6.1 Primary Flow: New Camera Test
 
 ```
 Home
   │
-  ├─→ [New Test]
+  ├─→ [New Camera]
   │     │
   │     ▼
   │   Recording Setup
@@ -442,7 +445,7 @@ Home
   │     │
   │     ├─→ [Tap Session] → Results Dashboard
   │     │
-  │     └─→ [Test Again] → Recording Setup (pre-filled)
+  │     └─→ [New Test] → Recording Setup (pre-filled with camera)
 ```
 
 ### 6.4 First-Time User Flow
@@ -457,7 +460,7 @@ Onboarding Tutorial
 Home (empty state)
   │
   ▼
-[New Test] → Normal flow
+[New Camera] → Normal flow
 ```
 
 ---

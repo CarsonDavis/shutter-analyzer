@@ -20,6 +20,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -351,21 +352,28 @@ private fun BottomActions(
             onClick = onTestAgain,
             modifier = Modifier.weight(1f)
         ) {
-            Text("TEST AGAIN")
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("NEW TEST")
         }
         OutlinedButton(
             onClick = onDelete,
+            modifier = Modifier.weight(1f),
             colors = ButtonDefaults.outlinedButtonColors(
                 contentColor = MaterialTheme.colorScheme.error
             )
         ) {
             Icon(
                 imageVector = Icons.Default.Delete,
-                contentDescription = "Delete camera",
+                contentDescription = null,
                 modifier = Modifier.size(18.dp)
             )
             Spacer(modifier = Modifier.width(8.dp))
-            Text("DELETE")
+            Text("DELETE CAMERA")
         }
     }
 }

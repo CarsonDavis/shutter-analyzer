@@ -17,10 +17,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Save
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -34,8 +36,10 @@ import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
@@ -95,8 +99,43 @@ fun ResultsScreen(
     val timelineData by viewModel.timelineData.collectAsStateWithLifecycle()
     val isLoading by viewModel.isLoading.collectAsStateWithLifecycle()
     val errorMessage by viewModel.errorMessage.collectAsStateWithLifecycle()
+    val showDeleteConfirmation by viewModel.showDeleteConfirmation.collectAsStateWithLifecycle()
+    val isDeleted by viewModel.isDeleted.collectAsStateWithLifecycle()
 
     var selectedTab by remember { mutableIntStateOf(ResultsTabs.SUMMARY) }
+
+    // Navigate back after deletion
+    LaunchedEffect(isDeleted) {
+        if (isDeleted) {
+            onBackClick()
+        }
+    }
+
+    // Delete confirmation dialog
+    if (showDeleteConfirmation) {
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissDeleteConfirmation() },
+            title = { Text("Delete Test") },
+            text = {
+                Text("Are you sure you want to delete this test and its video? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { viewModel.deleteSession() },
+                    colors = ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.dismissDeleteConfirmation() }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
@@ -173,9 +212,8 @@ fun ResultsScreen(
                     }
                 }
                 BottomButtons(
-                    isSaved = true,
-                    onSave = {},
                     onTestAgain = onTestAgain,
+                    onDelete = { viewModel.showDeleteConfirmation() },
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -197,9 +235,8 @@ fun ResultsScreen(
 
                 // Bottom buttons
                 BottomButtons(
-                    isSaved = true, // Don't allow save when empty
-                    onSave = {},
                     onTestAgain = onTestAgain,
+                    onDelete = { viewModel.showDeleteConfirmation() },
                     modifier = Modifier.padding(16.dp)
                 )
             }
@@ -381,12 +418,8 @@ fun ResultsScreen(
 
             // Bottom buttons (always visible)
             BottomButtons(
-                isSaved = isSaved,
-                onSave = {
-                    viewModel.saveSession()
-                    onBackClick()
-                },
                 onTestAgain = onTestAgain,
+                onDelete = { viewModel.showDeleteConfirmation() },
                 modifier = Modifier.padding(16.dp)
             )
         }
@@ -500,9 +533,8 @@ private fun ResultRow(
 
 @Composable
 private fun BottomButtons(
-    isSaved: Boolean,
-    onSave: () -> Unit,
     onTestAgain: () -> Unit,
+    onDelete: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     Row(
@@ -510,22 +542,32 @@ private fun BottomButtons(
         horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Button(
-            onClick = onSave,
-            modifier = Modifier.weight(1f),
-            enabled = !isSaved
-        ) {
-            Icon(Icons.Default.Save, contentDescription = "Save results")
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(if (isSaved) "SAVED" else "SAVE")
-        }
-
-        OutlinedButton(
             onClick = onTestAgain,
             modifier = Modifier.weight(1f)
         ) {
-            Icon(Icons.Default.Refresh, contentDescription = "Run another test")
+            Icon(
+                imageVector = Icons.Default.Refresh,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
             Spacer(modifier = Modifier.width(8.dp))
             Text("TEST AGAIN")
+        }
+
+        OutlinedButton(
+            onClick = onDelete,
+            modifier = Modifier.weight(1f),
+            colors = ButtonDefaults.outlinedButtonColors(
+                contentColor = MaterialTheme.colorScheme.error
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Delete,
+                contentDescription = null,
+                modifier = Modifier.size(18.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("DELETE TEST")
         }
     }
 }

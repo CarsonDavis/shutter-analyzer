@@ -62,7 +62,14 @@ class CameraRepositoryImpl @Inject constructor(
 
     override suspend fun saveCamera(camera: Camera): Long {
         val entity = camera.toEntity()
-        return cameraDao.insert(entity)
+        return if (camera.id == 0L) {
+            // New camera - insert
+            cameraDao.insert(entity)
+        } else {
+            // Existing camera - update
+            cameraDao.update(entity)
+            camera.id
+        }
     }
 
     override suspend fun deleteCamera(camera: Camera) {

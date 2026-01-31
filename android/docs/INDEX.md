@@ -1,6 +1,6 @@
 # Android Documentation Index
 
-**Last Updated**: 2026-01-31
+**Last Updated**: 2026-01-31 (UI button updates implemented)
 
 This index explains what each document in `android/docs/` is for and when you'd want to reference it.
 

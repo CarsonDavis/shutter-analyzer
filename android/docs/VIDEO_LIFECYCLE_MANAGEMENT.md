@@ -46,6 +46,21 @@ Users manage **cameras** and **tests**, not media files.
 
 ---
 
+## Auto-Save Behavior
+
+**There is no manual "save" step.** When a user completes a recording:
+
+1. **Session created** at start of recording flow (in RecordingSetupViewModel)
+2. **Video recorded** to `Movies/ShutterAnalyzer/` via MediaStore
+3. **Events saved** automatically when recording stops (RecordingViewModel.saveLiveDetectedEvents)
+4. **Video URI linked** to session automatically
+
+The Results screen shows completed data - no save button needed. Users can:
+- **Test Again** (↺ icon) - start a new test for the same camera
+- **Delete Test** (🗑️ icon, red) - remove this session and its video file
+
+---
+
 ## Implementation
 
 ### 1. New Component: VideoStorageManager
@@ -248,12 +263,14 @@ User taps "Delete Camera" in CameraDetailScreen
 
 ### Delete Individual Test Flow
 ```
-User taps "Delete Test" in ResultsScreen (future feature)
+User taps "Delete Test" in ResultsScreen
+  → Confirmation dialog shown
   → ResultsViewModel.deleteSession()
     → TestSessionRepository.deleteSession(session)
       → VideoStorageManager.deleteVideo(session.videoUri)
       → testSessionDao.delete(session)
         → FK CASCADE cleans event records
+  → Navigate back to camera detail or home
 ```
 
 ---
@@ -269,6 +286,8 @@ User taps "Delete Test" in ResultsScreen (future feature)
 | `data/local/database/dao/ShutterEventDao.kt` | MODIFY | Add `getEventCountForSession()` |
 | `domain/model/TestSession.kt` | MODIFY | Add `eventCount` property |
 | `ui/screens/camera/CameraDetailScreen.kt` | MODIFY | Use `eventCount` instead of `events.size` |
+| `ui/screens/results/ResultsScreen.kt` | MODIFY | Remove SAVE button, add DELETE TEST button |
+| `ui/screens/results/ResultsViewModel.kt` | MODIFY | Add `deleteSession()` method |
 | `ui/screens/videoimport/ImportViewModel.kt` | MODIFY | Always create camera (auto-generate name if blank) |
 | `ShutterAnalyzerApp.kt` | MODIFY | One-time orphan cleanup on first run |
 
@@ -279,10 +298,12 @@ Note: `VideoStorageManager` uses `@Singleton` + `@Inject constructor`, so Hilt p
 ## Testing
 
 ### Manual Testing
-1. Create a new test via recording flow → verify video saved
-2. Delete the camera → verify video removed from `Movies/ShutterAnalyzer/`
-3. Import a video without camera name → verify camera auto-created
-4. Check database for orphaned sessions after cleanup runs
+1. Create a new test via recording flow → verify video saved to `Movies/ShutterAnalyzer/`
+2. Verify results show automatically (no save step)
+3. Delete individual test from Results screen → verify video removed from storage
+4. Delete camera from Camera Detail screen → verify all videos removed from storage
+5. Import a video without camera name → verify camera auto-created
+6. Check database for orphaned sessions after cleanup runs
 
 ### Automated Testing
 - Unit test `VideoStorageManager.deleteVideo()` with mock ContentResolver

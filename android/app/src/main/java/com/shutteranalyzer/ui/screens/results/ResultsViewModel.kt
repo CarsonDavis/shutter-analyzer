@@ -101,6 +101,18 @@ class ResultsViewModel @Inject constructor(
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
     /**
+     * Whether to show the delete confirmation dialog.
+     */
+    private val _showDeleteConfirmation = MutableStateFlow(false)
+    val showDeleteConfirmation: StateFlow<Boolean> = _showDeleteConfirmation.asStateFlow()
+
+    /**
+     * Whether the session has been deleted (triggers navigation).
+     */
+    private val _isDeleted = MutableStateFlow(false)
+    val isDeleted: StateFlow<Boolean> = _isDeleted.asStateFlow()
+
+    /**
      * Timeline chart data (brightness values, events, threshold).
      */
     private val _timelineData = MutableStateFlow<TimelineData?>(null)
@@ -308,6 +320,32 @@ class ResultsViewModel @Inject constructor(
         viewModelScope.launch {
             // The session is already saved, just mark as saved for UI
             _isSaved.value = true
+        }
+    }
+
+    /**
+     * Show the delete confirmation dialog.
+     */
+    fun showDeleteConfirmation() {
+        _showDeleteConfirmation.value = true
+    }
+
+    /**
+     * Dismiss the delete confirmation dialog.
+     */
+    fun dismissDeleteConfirmation() {
+        _showDeleteConfirmation.value = false
+    }
+
+    /**
+     * Delete the current session and its associated video.
+     */
+    fun deleteSession() {
+        val currentSession = _session.value ?: return
+        viewModelScope.launch {
+            testSessionRepository.deleteSession(currentSession)
+            _showDeleteConfirmation.value = false
+            _isDeleted.value = true
         }
     }
 
