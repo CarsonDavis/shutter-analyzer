@@ -250,7 +250,7 @@ class RecordingViewModel @Inject constructor(
         cameraManager.startRecording(
             onComplete = { uri ->
                 recordedVideoUri = uri
-                Log.d(TAG, "Recording complete, URI: $uri")
+                Log.d(TAG, "=== RECORDING COMPLETE === URI: $uri, calling saveLiveDetectedEvents...")
                 // Save live-detected events directly (frame indices are now correct)
                 viewModelScope.launch {
                     saveLiveDetectedEvents(uri)
@@ -295,7 +295,7 @@ class RecordingViewModel @Inject constructor(
      * Also unlocks auto-exposure.
      */
     fun stopRecording() {
-        Log.d(TAG, "Stopping recording...")
+        Log.d(TAG, "=== STOP RECORDING CALLED === currentSpeedIndex=${_currentSpeedIndex.value}, detectedEventsCount=${detectedEvents.value.size}")
         cameraManager.unlockExposure()
         cameraManager.stopRecording()
     }
@@ -305,9 +305,15 @@ class RecordingViewModel @Inject constructor(
      * Includes error handling to prevent silent failures.
      */
     private suspend fun saveLiveDetectedEvents(videoUri: Uri) {
+        Log.d(TAG, "=== SAVE START === sessionId=$sessionId, videoUri=$videoUri")
         try {
             val markers = cameraManager.getDetectedEvents()
+            Log.d(TAG, "Got ${markers.size} markers from camera manager")
+            markers.forEachIndexed { index, marker ->
+                Log.d(TAG, "  Marker[$index]: start=${marker.startTimestamp}, end=${marker.endTimestamp}, brightnessValues=${marker.brightnessValues.size}")
+            }
             if (markers.isEmpty()) {
+                Log.w(TAG, "No markers to save - events were detected but list is empty")
                 // Just save the video URI even if no events
                 try {
                     testSessionRepository.updateVideoUri(sessionId, videoUri.toString())

@@ -40,7 +40,8 @@ interface CameraRepository {
  */
 @Singleton
 class CameraRepositoryImpl @Inject constructor(
-    private val cameraDao: CameraDao
+    private val cameraDao: CameraDao,
+    private val testSessionRepository: TestSessionRepository
 ) : CameraRepository {
 
     override fun getAllCameras(): Flow<List<Camera>> {
@@ -65,6 +66,9 @@ class CameraRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteCamera(camera: Camera) {
+        // Clean up videos for all sessions BEFORE cascade delete removes session records
+        testSessionRepository.deleteAllSessionsForCamera(camera.id)
+        // Now safe to delete camera (cascade will clean up any remaining session/event records)
         cameraDao.delete(camera.toEntity())
     }
 

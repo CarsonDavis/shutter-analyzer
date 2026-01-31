@@ -16,5 +16,7 @@ data class TestSession(
     val avgDeviationPercent: Double?,
     val events: List<ShutterEvent> = emptyList(),
     val expectedSpeeds: List<String> = emptyList(),
-    val videoUri: String? = null
+    val videoUri: String? = null,
+    /** Cached event count for list display (avoids loading all events) */
+    val eventCount: Int = events.size
 )

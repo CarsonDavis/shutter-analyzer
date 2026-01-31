@@ -2,12 +2,15 @@ package com.shutteranalyzer.data.repository
 
 import com.shutteranalyzer.analysis.model.ShutterEvent
 import com.shutteranalyzer.data.local.database.dao.ShutterEventDao
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import com.shutteranalyzer.data.local.database.dao.TestSessionDao
 import com.shutteranalyzer.data.local.database.entity.ShutterEventEntity
 import com.shutteranalyzer.data.local.database.entity.TestSessionEntity
+import com.shutteranalyzer.data.storage.VideoStorageManager
 import com.shutteranalyzer.domain.model.TestSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -45,8 +48,15 @@ interface TestSessionRepository {
 
     /**
      * Delete a test session and all its events.
+     * Also deletes the associated video file from storage.
      */
     suspend fun deleteSession(session: TestSession)
+
+    /**
+     * Delete all sessions for a camera, including their video files.
+     * Called before camera deletion to clean up videos before cascade delete.
+     */
+    suspend fun deleteAllSessionsForCamera(cameraId: Long)
 
     /**
      * Update the video URI for a session.
@@ -72,15 +82,20 @@ interface TestSessionRepository {
 /**
  * Implementation of TestSessionRepository using Room database.
  */
+@OptIn(ExperimentalCoroutinesApi::class)
 @Singleton
 class TestSessionRepositoryImpl @Inject constructor(
     private val testSessionDao: TestSessionDao,
-    private val shutterEventDao: ShutterEventDao
+    private val shutterEventDao: ShutterEventDao,
+    private val videoStorageManager: VideoStorageManager
 ) : TestSessionRepository {
 
     override fun getSessionsForCamera(cameraId: Long): Flow<List<TestSession>> {
-        return testSessionDao.getSessionsForCamera(cameraId).map { entities ->
-            entities.map { it.toDomainModel(emptyList()) }
+        return testSessionDao.getSessionsForCamera(cameraId).mapLatest { entities ->
+            entities.map { entity ->
+                val eventCount = shutterEventDao.getEventCountForSession(entity.id)
+                entity.toDomainModel(emptyList(), eventCount)
+            }
         }
     }
 
@@ -124,7 +139,20 @@ class TestSessionRepositoryImpl @Inject constructor(
     }
 
     override suspend fun deleteSession(session: TestSession) {
+        // Delete video file BEFORE removing DB record
+        videoStorageManager.deleteVideo(session.videoUri)
         testSessionDao.delete(session.toEntity())
+    }
+
+    override suspend fun deleteAllSessionsForCamera(cameraId: Long) {
+        // Get all sessions to access their videoUris
+        val sessions = testSessionDao.getSessionsForCameraOnce(cameraId)
+        // Delete each video file
+        sessions.forEach { entity ->
+            videoStorageManager.deleteVideo(entity.videoUri)
+        }
+        // Then delete DB records (FK cascade will clean up events)
+        testSessionDao.deleteAllForCamera(cameraId)
     }
 
     override suspend fun updateVideoUri(sessionId: Long, uri: String) {
@@ -214,7 +242,10 @@ class TestSessionRepositoryImpl @Inject constructor(
     }
 
     // Mapping functions
-    private fun TestSessionEntity.toDomainModel(events: List<ShutterEvent>): TestSession {
+    private fun TestSessionEntity.toDomainModel(
+        events: List<ShutterEvent>,
+        eventCount: Int = events.size
+    ): TestSession {
         val expectedSpeedsList = if (expectedSpeedsJson.isEmpty()) {
             emptyList()
         } else {
@@ -228,7 +259,8 @@ class TestSessionRepositoryImpl @Inject constructor(
             avgDeviationPercent = avgDeviationPercent,
             events = events,
             expectedSpeeds = expectedSpeedsList,
-            videoUri = videoUri
+            videoUri = videoUri,
+            eventCount = eventCount
         )
     }
 

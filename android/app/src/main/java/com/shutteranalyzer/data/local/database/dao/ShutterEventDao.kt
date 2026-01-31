@@ -36,4 +36,10 @@ interface ShutterEventDao {
      */
     @Query("DELETE FROM shutter_events WHERE sessionId = :sessionId")
     suspend fun deleteForSession(sessionId: Long)
+
+    /**
+     * Get the count of events for a session.
+     */
+    @Query("SELECT COUNT(*) FROM shutter_events WHERE sessionId = :sessionId")
+    suspend fun getEventCountForSession(sessionId: Long): Int
 }

@@ -220,16 +220,17 @@ class ImportViewModel @Inject constructor(
 
         viewModelScope.launch {
             try {
-                // Create camera if name provided
-                val cameraId: Long? = if (_cameraName.value.isNotBlank()) {
-                    val camera = Camera(
-                        name = _cameraName.value.trim(),
-                        createdAt = Instant.now()
-                    )
-                    cameraRepository.saveCamera(camera)
-                } else {
-                    null
+                // ALWAYS create a camera - generate name if blank
+                val cameraName = _cameraName.value.trim().ifBlank {
+                    "Import ${java.time.LocalDateTime.now().format(
+                        java.time.format.DateTimeFormatter.ofPattern("MMM d HH:mm")
+                    )}"
                 }
+                val camera = Camera(
+                    name = cameraName,
+                    createdAt = Instant.now()
+                )
+                val cameraId = cameraRepository.saveCamera(camera)
 
                 // Create expected speeds list in order
                 val expectedSpeeds = result.events.indices.map { index ->
@@ -238,7 +239,7 @@ class ImportViewModel @Inject constructor(
 
                 // Create test session
                 val session = TestSession(
-                    cameraId = cameraId,
+                    cameraId = cameraId,  // Never null
                     recordingFps = fps,
                     testedAt = Instant.now(),
                     avgDeviationPercent = null,

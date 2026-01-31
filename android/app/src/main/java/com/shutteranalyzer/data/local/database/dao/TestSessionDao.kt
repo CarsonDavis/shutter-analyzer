@@ -61,4 +61,18 @@ interface TestSessionDao {
      */
     @Query("UPDATE test_sessions SET expectedSpeedsJson = :expectedSpeedsJson WHERE id = :sessionId")
     suspend fun updateExpectedSpeeds(sessionId: Long, expectedSpeedsJson: String)
+
+    /**
+     * Get all sessions for a camera as a one-shot query (not a Flow).
+     * Used for batch operations like cascade delete.
+     */
+    @Query("SELECT * FROM test_sessions WHERE cameraId = :cameraId")
+    suspend fun getSessionsForCameraOnce(cameraId: Long): List<TestSessionEntity>
+
+    /**
+     * Get all sessions with null cameraId (orphaned sessions).
+     * Used for cleanup of legacy data.
+     */
+    @Query("SELECT * FROM test_sessions WHERE cameraId IS NULL")
+    suspend fun getSessionsWithNullCamera(): List<TestSessionEntity>
 }

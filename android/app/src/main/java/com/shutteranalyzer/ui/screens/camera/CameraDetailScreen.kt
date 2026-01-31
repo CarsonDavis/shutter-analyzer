@@ -254,7 +254,7 @@ private fun SessionCard(
 ) {
     val dateFormatter = DateTimeFormatter.ofPattern("MMM d, yyyy")
         .withZone(ZoneId.systemDefault())
-    val hasEvents = session.events.isNotEmpty()
+    val hasEvents = session.eventCount > 0
 
     Card(
         modifier = Modifier
@@ -275,7 +275,7 @@ private fun SessionCard(
                 )
                 Text(
                     text = if (hasEvents) {
-                        "${session.events.size} speeds tested"
+                        "${session.eventCount} speeds tested"
                     } else {
                         "No events recorded"
                     },

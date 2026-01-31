@@ -176,7 +176,9 @@ class ShutterCameraManager @Inject constructor(
                 index = eventIndex++,
                 brightnessValues = brightnessValues
             )
+            android.util.Log.d("ShutterCameraManager", "EVENT DETECTED: index=${event.index}, start=$startTimestamp, end=$endTimestamp, brightnessCount=${brightnessValues.size}")
             _detectedEvents.value = _detectedEvents.value + event
+            android.util.Log.d("ShutterCameraManager", "Total events now: ${_detectedEvents.value.size}")
         }
     }
 
@@ -367,6 +369,7 @@ class ShutterCameraManager @Inject constructor(
         recording = null
 
         // Reset for new recording (including timestamp reference)
+        android.util.Log.d("ShutterCameraManager", "=== START RECORDING === Resetting events (had ${_detectedEvents.value.size})")
         _detectedEvents.value = emptyList()
         eventIndex = 0
         frameAnalyzer.resetForNewRecording()
@@ -418,6 +421,10 @@ class ShutterCameraManager @Inject constructor(
      * Stop recording video.
      */
     fun stopRecording() {
+        android.util.Log.d("ShutterCameraManager", "=== STOP RECORDING === events=${_detectedEvents.value.size}")
+        _detectedEvents.value.forEachIndexed { index, event ->
+            android.util.Log.d("ShutterCameraManager", "  Event[$index]: start=${event.startTimestamp}, end=${event.endTimestamp}")
+        }
         recording?.stop()
         recording = null
     }
