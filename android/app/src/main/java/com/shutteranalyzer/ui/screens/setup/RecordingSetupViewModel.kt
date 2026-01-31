@@ -13,15 +13,34 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import java.time.Instant
+import java.time.LocalDateTime
+import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
 /**
- * Standard shutter speeds available for testing.
+ * Standard shutter speeds available for testing (default set).
  */
 val STANDARD_SPEEDS = listOf(
     "1/1000", "1/500", "1/250", "1/125", "1/60",
     "1/30", "1/15", "1/8", "1/4", "1/2", "1s"
 )
+
+/**
+ * All available shutter speeds for the Add/Remove picker (1/8000 to 8s).
+ */
+val ALL_SPEEDS = listOf(
+    "1/8000", "1/4000", "1/2000", "1/1000", "1/500", "1/250", "1/125", "1/60",
+    "1/30", "1/15", "1/8", "1/4", "1/2", "1s", "2s", "4s", "8s"
+)
+
+/**
+ * Speed selection mode options.
+ */
+enum class SpeedSelectionMode {
+    STANDARD,      // Use STANDARD_SPEEDS as-is
+    ADD_REMOVE,    // Checkbox picker to add/remove from full list
+    ENTER_CUSTOM   // Text input for custom speeds
+}
 
 /**
  * ViewModel for the Recording Setup screen.
@@ -39,14 +58,29 @@ class RecordingSetupViewModel @Inject constructor(
     val cameraName = MutableStateFlow("")
 
     /**
-     * Whether to use the standard speed set.
+     * Speed selection mode.
      */
-    val useStandardSpeeds = MutableStateFlow(true)
+    val speedSelectionMode = MutableStateFlow(SpeedSelectionMode.STANDARD)
 
     /**
-     * Selected speeds (for custom mode).
+     * Selected speeds (for add/remove mode).
      */
     val selectedSpeeds = MutableStateFlow<List<String>>(STANDARD_SPEEDS)
+
+    /**
+     * Custom speed text input (for enter custom mode).
+     */
+    val customSpeedText = MutableStateFlow("")
+
+    /**
+     * Parsed custom speeds from text input.
+     */
+    val parsedCustomSpeeds = MutableStateFlow<List<String>>(emptyList())
+
+    /**
+     * Error message for custom speed parsing.
+     */
+    val customSpeedError = MutableStateFlow<String?>(null)
 
     /**
      * Device FPS capability.
@@ -90,12 +124,23 @@ class RecordingSetupViewModel @Inject constructor(
     }
 
     /**
-     * Toggle between standard and custom speed sets.
+     * Set the speed selection mode.
      */
-    fun setUseStandardSpeeds(standard: Boolean) {
-        useStandardSpeeds.value = standard
-        if (standard) {
-            selectedSpeeds.value = STANDARD_SPEEDS
+    fun setSpeedSelectionMode(mode: SpeedSelectionMode) {
+        speedSelectionMode.value = mode
+        when (mode) {
+            SpeedSelectionMode.STANDARD -> {
+                selectedSpeeds.value = STANDARD_SPEEDS
+            }
+            SpeedSelectionMode.ADD_REMOVE -> {
+                // Keep current selection or reset to standard
+                if (selectedSpeeds.value.isEmpty()) {
+                    selectedSpeeds.value = STANDARD_SPEEDS
+                }
+            }
+            SpeedSelectionMode.ENTER_CUSTOM -> {
+                // Keep existing custom text
+            }
         }
     }
 
@@ -107,12 +152,53 @@ class RecordingSetupViewModel @Inject constructor(
         if (speed in current) {
             current.remove(speed)
         } else {
-            // Maintain order
-            val allSpeeds = STANDARD_SPEEDS + listOf("2s", "4s", "B")
+            // Maintain order based on ALL_SPEEDS
             current.add(speed)
-            current.sortBy { allSpeeds.indexOf(it) }
+            current.sortBy { ALL_SPEEDS.indexOf(it).let { idx -> if (idx == -1) Int.MAX_VALUE else idx } }
         }
         selectedSpeeds.value = current
+    }
+
+    /**
+     * Update custom speed text and parse it.
+     */
+    fun updateCustomSpeedText(text: String) {
+        customSpeedText.value = text
+        parseCustomSpeeds(text)
+    }
+
+    /**
+     * Parse custom speeds from comma-separated text.
+     * Valid formats: 1/xxx, xs (e.g., 1/500, 1/60, 1s, 2s)
+     */
+    private fun parseCustomSpeeds(text: String) {
+        if (text.isBlank()) {
+            parsedCustomSpeeds.value = emptyList()
+            customSpeedError.value = null
+            return
+        }
+
+        val speeds = text.split(",").map { it.trim() }.filter { it.isNotEmpty() }
+        val validSpeeds = mutableListOf<String>()
+        val invalidSpeeds = mutableListOf<String>()
+
+        val fractionPattern = Regex("^1/\\d+$")
+        val secondsPattern = Regex("^\\d+s$")
+
+        for (speed in speeds) {
+            if (fractionPattern.matches(speed) || secondsPattern.matches(speed)) {
+                validSpeeds.add(speed)
+            } else {
+                invalidSpeeds.add(speed)
+            }
+        }
+
+        parsedCustomSpeeds.value = validSpeeds
+        customSpeedError.value = if (invalidSpeeds.isNotEmpty()) {
+            "Invalid: ${invalidSpeeds.joinToString(", ")}"
+        } else {
+            null
+        }
     }
 
     /**
@@ -138,19 +224,18 @@ class RecordingSetupViewModel @Inject constructor(
 
     /**
      * Create a new test session and return its ID.
-     * Also creates a camera if a name is provided.
+     * Always creates a camera - uses provided name or generates default.
      */
     suspend fun createSession(): Long {
-        // Create camera if name is provided
-        val cameraId: Long? = if (cameraName.value.isNotBlank()) {
-            val camera = Camera(
-                name = cameraName.value.trim(),
-                createdAt = Instant.now()
-            )
-            cameraRepository.saveCamera(camera)
-        } else {
-            null // No camera associated
+        // Always create a camera - use provided name or generate default
+        val finalName = cameraName.value.trim().ifBlank {
+            "Test ${LocalDateTime.now().format(DateTimeFormatter.ofPattern("MMM d HH:mm"))}"
         }
+        val camera = Camera(
+            name = finalName,
+            createdAt = Instant.now()
+        )
+        val cameraId = cameraRepository.saveCamera(camera)
 
         // Create test session with expected speeds
         val session = TestSession(
@@ -158,14 +243,23 @@ class RecordingSetupViewModel @Inject constructor(
             recordingFps = _deviceFps.value.toDouble(),
             testedAt = Instant.now(),
             avgDeviationPercent = null,
-            expectedSpeeds = selectedSpeeds.value
+            expectedSpeeds = getSpeedsToTest()
         )
 
         return testSessionRepository.saveSession(session)
     }
 
     /**
-     * Get the list of speeds to test.
+     * Get the list of speeds to test based on current mode.
      */
-    fun getSpeedsToTest(): List<String> = selectedSpeeds.value
+    fun getSpeedsToTest(): List<String> = when (speedSelectionMode.value) {
+        SpeedSelectionMode.STANDARD -> STANDARD_SPEEDS
+        SpeedSelectionMode.ADD_REMOVE -> selectedSpeeds.value
+        SpeedSelectionMode.ENTER_CUSTOM -> parsedCustomSpeeds.value
+    }
+
+    /**
+     * Check if the current speed selection is valid (non-empty).
+     */
+    fun isSpeedSelectionValid(): Boolean = getSpeedsToTest().isNotEmpty()
 }

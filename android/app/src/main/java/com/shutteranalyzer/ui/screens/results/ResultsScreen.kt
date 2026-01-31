@@ -436,20 +436,13 @@ private fun ResultsTableHeader() {
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {
         Text(
-            text = "Speed",
+            text = "Expected",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f)
         )
         Text(
-            text = "Expected",
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End
-        )
-        Text(
-            text = "Actual",
+            text = "Measured",
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Bold,
             modifier = Modifier.weight(1f),
@@ -488,15 +481,8 @@ private fun ResultRow(
             modifier = Modifier.weight(1f)
         )
         Text(
-            text = formatMs(result.expectedMs),
-            style = MaterialTheme.typography.bodySmall,
-            modifier = Modifier.weight(1f),
-            textAlign = TextAlign.End,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Text(
             text = formatAsSpeed(result.measuredMs),
-            style = MaterialTheme.typography.bodySmall,
+            style = MaterialTheme.typography.bodyMedium,
             modifier = Modifier.weight(1f),
             textAlign = TextAlign.End
         )
@@ -582,7 +568,7 @@ private fun NoEventsDetectedState(
                         "• The lighting was too dim\n" +
                         "• The phone wasn't positioned correctly\n" +
                         "• The shutter wasn't fired during recording\n\n" +
-                        "Try again with brighter lighting and make sure the phone can see through the camera's lens opening.",
+                        "Try again with brighter lighting and make sure the phone can see the back of the shutter with the aperture fully open.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                 textAlign = TextAlign.Center
@@ -612,7 +598,7 @@ private fun ResultRowPreview() {
                     measuredMs = 2.12,
                     deviationPercent = 6.0
                 ),
-                formatMs = { ms -> "${String.format("%.2f", ms)}ms" },
+                formatMs = { "" },
                 formatAsSpeed = { ms -> "1/${(1000.0 / ms).toInt()}" },
                 formatDeviation = { p -> "+${p.toInt()}%" }
             )
@@ -623,7 +609,7 @@ private fun ResultRowPreview() {
                     measuredMs = 4.08,
                     deviationPercent = 2.0
                 ),
-                formatMs = { ms -> "${String.format("%.2f", ms)}ms" },
+                formatMs = { "" },
                 formatAsSpeed = { ms -> "1/${(1000.0 / ms).toInt()}" },
                 formatDeviation = { p -> "+${p.toInt()}%" }
             )

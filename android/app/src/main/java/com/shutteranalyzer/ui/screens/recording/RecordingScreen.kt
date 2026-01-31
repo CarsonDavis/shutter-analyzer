@@ -311,16 +311,6 @@ private fun SettingUpOverlay(
     onCancel: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
-        // Begin Detecting button in top right (shifted left to avoid sliders)
-        Button(
-            onClick = onBeginDetection,
-            modifier = Modifier
-                .align(Alignment.TopEnd)
-                .padding(top = 16.dp, end = 100.dp)
-        ) {
-            Text("Begin Detecting")
-        }
-
         // Cancel button in top left
         TextButton(
             onClick = onCancel,
@@ -331,15 +321,54 @@ private fun SettingUpOverlay(
             Text("Cancel", color = Color.White)
         }
 
-        // Vertical sliders on the right side
-        Row(
+        // Vertical sliders on the right side - zoom on top, focus below
+        Column(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
-                .padding(end = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+                .padding(end = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Focus slider (left of zoom)
+            // Zoom slider (top)
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
+                    .padding(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.ZoomIn,
+                    contentDescription = "Zoom control",
+                    tint = Color.White,
+                    modifier = Modifier.size(28.dp)
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Text(
+                    text = "${maxZoomRatio.toInt()}x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+
+                // Vertical zoom slider
+                VerticalSlider(
+                    value = zoomRatio,
+                    onValueChange = onZoomChange,
+                    valueRange = minZoomRatio..maxZoomRatio,
+                    modifier = Modifier
+                        .width(44.dp)
+                        .height(150.dp)
+                )
+
+                Text(
+                    text = "1x",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.White.copy(alpha = 0.7f)
+                )
+            }
+
+            // Focus slider (bottom)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier
@@ -375,7 +404,7 @@ private fun SettingUpOverlay(
                     enabled = !isAutoFocus,
                     modifier = Modifier
                         .width(44.dp)
-                        .height(200.dp)
+                        .height(150.dp)
                 )
 
                 Text(
@@ -384,45 +413,16 @@ private fun SettingUpOverlay(
                     color = Color.White.copy(alpha = 0.7f)
                 )
             }
+        }
 
-            // Zoom slider (far right)
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(12.dp))
-                    .padding(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.ZoomIn,
-                    contentDescription = "Zoom control",
-                    tint = Color.White,
-                    modifier = Modifier.size(28.dp)
-                )
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                Text(
-                    text = "${maxZoomRatio.toInt()}x",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-
-                // Vertical zoom slider
-                VerticalSlider(
-                    value = zoomRatio,
-                    onValueChange = onZoomChange,
-                    valueRange = minZoomRatio..maxZoomRatio,
-                    modifier = Modifier
-                        .width(44.dp)
-                        .height(200.dp)
-                )
-
-                Text(
-                    text = "1x",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
-            }
+        // Begin Detecting button centered at bottom
+        Button(
+            onClick = onBeginDetection,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 32.dp)
+        ) {
+            Text("Begin Detecting")
         }
     }
 }
@@ -541,7 +541,8 @@ private fun ReadyForBaselineOverlay(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         ChecklistItem(text = "Light source is ON")
-                        ChecklistItem(text = "Phone can see through shutter")
+                        ChecklistItem(text = "Phone can see back of shutter")
+                        ChecklistItem(text = "Aperture fully open")
                         ChecklistItem(text = "Shutter is CLOSED")
                     }
 

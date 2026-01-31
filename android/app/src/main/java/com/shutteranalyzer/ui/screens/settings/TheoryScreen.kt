@@ -86,7 +86,7 @@ fun TheoryScreen(
                     Each frame represents a fixed slice of time. At 240fps, each frame captures 1/240 second (4.17ms) of real time.
 
                     When recording a camera shutter:
-                    1. Position the phone to see through the shutter
+                    1. Position the phone to see the back of the shutter (aperture fully open)
                     2. Place a bright light source behind the shutter
                     3. When the shutter opens, bright light is visible
                     4. When closed, the frame is dark

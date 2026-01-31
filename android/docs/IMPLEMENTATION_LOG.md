@@ -2063,6 +2063,142 @@ Expected log messages:
 - "Evicting thumbnails for event X (too far from current Y)"
 
 ### Next Steps
+- UI/UX Improvements ✅
+
+---
+
+## 2025-01-25 - UI/UX Improvements (todo_4)
+
+### Overview
+Implemented 10 UI/UX improvements based on user feedback to enhance usability and visual consistency.
+
+### Changes Made
+
+#### Task 1: Fix ExpandFramesButton Sizing
+**Problem:** Button used `aspectRatio(9f/16f)` (portrait ~142dp tall) but frame thumbnails use `aspectRatio(16f/9f)` (landscape ~45dp tall). Button was 3x taller than frames.
+
+**Fix:** Changed to `aspectRatio(16f/9f)` to match frame thumbnails. Adjusted padding from 8dp to 4dp and icon size from 24dp to 20dp for better fit.
+
+**File:** `ui/screens/review/EventReviewScreen.kt`
+
+#### Task 2: Change Expand Button Text
+**Problem:** Both buttons showed generic "Examine\nmore" text.
+
+**Fix:** Added `isLeft: Boolean` parameter to `ExpandFramesButton`:
+- Left button: "Earlier\nframes"
+- Right button: "Later\nframes"
+
+**File:** `ui/screens/review/EventReviewScreen.kt`
+
+#### Task 3: Update Accuracy Color Thresholds
+**Problem:** Old thresholds (0-5%, 5-10%, 10-15%, 15%+) were too strict for typical film camera variance.
+
+**Fix:** Updated to more realistic thresholds:
+| Range | Color | Label |
+|-------|-------|-------|
+| 0-10% | Green | Good |
+| 10-30% | Yellow | Fair |
+| 30-60% | Orange | Poor |
+| 60%+ | Red | Bad |
+
+**File:** `ui/theme/Color.kt`
+
+#### Task 4: Results Table Format - Fractions Only
+**Problem:** Table showed "Expected (ms)" column with milliseconds. User wanted fractions only.
+
+**Fix:**
+- Removed "Speed" column (redundant with Expected)
+- Changed "Expected" to show fraction (e.g., "1/500")
+- Changed "Actual" header to "Measured"
+- Measured column uses `formatAsSpeed()` for "1/x" format
+- Removed ms display entirely
+
+**File:** `ui/screens/results/ResultsScreen.kt`
+
+#### Task 5: Default Camera Name When Empty
+**Problem:** Empty camera name created session with `cameraId = null`, losing the test in history.
+
+**Fix:** Always create a camera entry:
+- If name provided: use provided name
+- If blank: generate default "Test Jan 25 14:30" using current datetime
+
+**File:** `ui/screens/setup/RecordingSetupViewModel.kt`
+
+#### Task 6: Move "Begin Detecting" Button
+**Problem:** Button was at top-right, awkward position during framing.
+
+**Fix:** Moved to `Alignment.BottomCenter` with `padding(bottom = 32.dp)` for thumb-friendly access.
+
+**File:** `ui/screens/recording/RecordingScreen.kt`
+
+#### Task 7: Reposition Zoom/Focus Sliders
+**Problem:** Sliders were side-by-side in a Row, taking too much horizontal space.
+
+**Fix:** Changed from `Row` to `Column` layout:
+- Zoom slider on top
+- Focus slider on bottom
+- Both aligned to right edge
+- Reduced slider height from 200dp to 150dp each
+- Spacing reduced from 12dp to 16dp vertical
+
+**File:** `ui/screens/recording/RecordingScreen.kt`
+
+#### Task 8: Exposure Lock Research
+**Finding:** Current `CONTROL_AE_LOCK = true` implementation is correct. AE_LOCK freezes the auto-exposure algorithm's current ISO and shutter speed values. Manual control would require Camera2 interop for `SENSOR_SENSITIVITY` and `SENSOR_EXPOSURE_TIME`.
+
+**Status:** No code changes needed - current implementation is sufficient.
+
+#### Task 9: Custom Speeds - 3 Options
+**Problem:** Only 2 options (Standard, Custom checkboxes).
+
+**Fix:** Added `SpeedSelectionMode` enum with 3 options:
+
+| Mode | Description |
+|------|-------------|
+| `STANDARD` | Uses STANDARD_SPEEDS list as-is (1/1000 to 1s) |
+| `ADD_REMOVE` | Checkbox picker from ALL_SPEEDS (1/8000 to 8s) |
+| `ENTER_CUSTOM` | Text input for comma-separated speeds |
+
+Speed ranges:
+- `STANDARD_SPEEDS`: 1/1000, 1/500, 1/250, 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2, 1s
+- `ALL_SPEEDS`: 1/8000, 1/4000, 1/2000, 1/1000, 1/500, 1/250, 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2, 1s, 2s, 4s, 8s
+
+Custom text input:
+- Validates format: `1/xxx` or `xs` (e.g., "1/500, 1/250, 1s")
+- Shows parse errors for invalid entries
+- Shows count of valid speeds entered
+
+**Files:**
+- `ui/screens/setup/RecordingSetupViewModel.kt`
+- `ui/screens/setup/RecordingSetupScreen.kt`
+
+#### Task 10: Help Icon on Home Screen
+**Problem:** Tutorial and Theory only accessible through Settings menu.
+
+**Fix:** Added Help icon with dropdown menu in top app bar:
+- Help icon (question mark) next to Settings icon
+- Dropdown menu with "Tutorial" and "How It Works" options
+- Tutorial → Onboarding screen
+- How It Works → Theory screen
+
+**Files:**
+- `ui/screens/home/HomeScreen.kt`
+- `ui/navigation/NavGraph.kt`
+
+### Files Modified Summary
+
+| File | Tasks |
+|------|-------|
+| `ui/screens/review/EventReviewScreen.kt` | 1, 2 |
+| `ui/theme/Color.kt` | 3 |
+| `ui/screens/results/ResultsScreen.kt` | 4 |
+| `ui/screens/setup/RecordingSetupViewModel.kt` | 5, 9 |
+| `ui/screens/setup/RecordingSetupScreen.kt` | 9 |
+| `ui/screens/recording/RecordingScreen.kt` | 6, 7 |
+| `ui/screens/home/HomeScreen.kt` | 10 |
+| `ui/navigation/NavGraph.kt` | 10 |
+
+### Next Steps
 - Phase 8: Publishing
 
 ---

@@ -58,7 +58,7 @@ private val onboardingPages = listOf(
     OnboardingPage(
         icon = Icons.Default.Videocam,
         title = "Equipment Setup",
-        description = "Mount your phone on a tripod or stable surface, pointing at the camera's film plane. Open the camera back so you can see through the shutter."
+        description = "Mount your phone on a tripod or stable surface, pointing at the camera's film plane. Open the camera back so you can see the back of the shutter, and set the aperture to fully open."
     ),
     OnboardingPage(
         icon = Icons.Default.LightMode,

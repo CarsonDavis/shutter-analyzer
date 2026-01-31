@@ -2,11 +2,11 @@ package com.shutteranalyzer.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Accuracy indicator colors (from wireframes)
-val AccuracyGreen = Color(0xFF4CAF50)   // 0-5% error - Accurate
-val AccuracyYellow = Color(0xFFFFEB3B)  // 5-10% error - Slight deviation
-val AccuracyOrange = Color(0xFFFF9800)  // 10-15% error - Moderate deviation
-val AccuracyRed = Color(0xFFF44336)     // >15% error - Significant deviation
+// Accuracy indicator colors
+val AccuracyGreen = Color(0xFF4CAF50)   // 0-10% error - Good
+val AccuracyYellow = Color(0xFFFFEB3B)  // 10-30% error - Fair
+val AccuracyOrange = Color(0xFFFF9800)  // 30-60% error - Poor
+val AccuracyRed = Color(0xFFF44336)     // >60% error - Bad
 val ContextBlue = Color(0xFF2196F3)     // Context frames (not in event)
 
 // Light theme colors
@@ -38,9 +38,9 @@ val ShutterOnSurfaceDark = Color(0xFFE6E1E5)
  */
 fun getAccuracyColor(deviationPercent: Double): Color {
     return when {
-        deviationPercent <= 5.0 -> AccuracyGreen
-        deviationPercent <= 10.0 -> AccuracyYellow
-        deviationPercent <= 15.0 -> AccuracyOrange
+        deviationPercent <= 10.0 -> AccuracyGreen
+        deviationPercent <= 30.0 -> AccuracyYellow
+        deviationPercent <= 60.0 -> AccuracyOrange
         else -> AccuracyRed
     }
 }
@@ -50,9 +50,9 @@ fun getAccuracyColor(deviationPercent: Double): Color {
  */
 fun getAccuracyLabel(deviationPercent: Double): String {
     return when {
-        deviationPercent <= 5.0 -> "Good"
-        deviationPercent <= 10.0 -> "Fair"
-        deviationPercent <= 15.0 -> "Poor"
+        deviationPercent <= 10.0 -> "Good"
+        deviationPercent <= 30.0 -> "Fair"
+        deviationPercent <= 60.0 -> "Poor"
         else -> "Bad"
     }
 }

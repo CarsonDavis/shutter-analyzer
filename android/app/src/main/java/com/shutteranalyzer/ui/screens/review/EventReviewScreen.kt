@@ -231,7 +231,7 @@ private fun EventReviewContent(
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             // [+] button on left to add frames before
-            ExpandFramesButton(onClick = onAddFramesBefore)
+            ExpandFramesButton(onClick = onAddFramesBefore, isLeft = true)
 
             // Frame thumbnails
             event.frames.forEachIndexed { index, frame ->
@@ -242,7 +242,7 @@ private fun EventReviewContent(
             }
 
             // [+] button on right to add frames after
-            ExpandFramesButton(onClick = onAddFramesAfter)
+            ExpandFramesButton(onClick = onAddFramesAfter, isLeft = false)
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -413,6 +413,7 @@ private fun FrameThumbnail(
 @Composable
 private fun ExpandFramesButton(
     onClick: () -> Unit,
+    isLeft: Boolean,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -426,20 +427,19 @@ private fun ExpandFramesButton(
         Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .aspectRatio(9f / 16f)
-                .padding(8.dp),
+                .aspectRatio(16f / 9f)
+                .padding(4.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center
         ) {
             Icon(
                 imageVector = Icons.Default.Add,
-                contentDescription = "Add more frames",
+                contentDescription = if (isLeft) "Add earlier frames" else "Add later frames",
                 tint = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.size(24.dp)
+                modifier = Modifier.size(20.dp)
             )
-            Spacer(modifier = Modifier.height(4.dp))
             Text(
-                text = "Examine\nmore",
+                text = if (isLeft) "Earlier\nframes" else "Later\nframes",
                 style = MaterialTheme.typography.labelSmall,
                 textAlign = TextAlign.Center,
                 color = MaterialTheme.colorScheme.onSurfaceVariant

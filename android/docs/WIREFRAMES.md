@@ -1,7 +1,7 @@
 # Shutter Analyzer - Android Wireframes
 
 **Status**: In Progress
-**Last Updated**: 2025-01-24
+**Last Updated**: 2025-01-25
 
 These wireframes represent the screen layouts for the Android app. All screens assume a standard mobile portrait orientation.
 
@@ -14,7 +14,7 @@ These wireframes represent the screen layouts for the Android app. All screens a
 │ ░░░░░░░░ STATUS BAR ░░░░░░░░░░  │
 ├─────────────────────────────────┤
 │                                 │
-│   SHUTTER ANALYZER        [⚙]   │
+│   SHUTTER ANALYZER    [⚙] [?]   │
 │                                 │
 ├─────────────────────────────────┤
 │                                 │
@@ -58,7 +58,7 @@ These wireframes represent the screen layouts for the Android app. All screens a
 │ ░░░░░░░░ STATUS BAR ░░░░░░░░░░  │
 ├─────────────────────────────────┤
 │                                 │
-│   SHUTTER ANALYZER        [⚙]   │
+│   SHUTTER ANALYZER    [⚙] [?]   │
 │                                 │
 ├─────────────────────────────────┤
 │                                 │
@@ -316,8 +316,13 @@ These wireframes represent the screen layouts for the Android app. All screens a
 │  └─────────────────────────┘    │
 │                                 │
 │  ┌─────────────────────────┐    │
-│  │ ○ Custom                │    │
-│  │   Choose specific speeds│    │
+│  │ ○ Add or Remove Speeds  │    │
+│  │   Choose from list      │    │
+│  └─────────────────────────┘    │
+│                                 │
+│  ┌─────────────────────────┐    │
+│  │ ○ Enter Custom Speeds   │    │
+│  │   Type your own         │    │
 │  └─────────────────────────┘    │
 │                                 │
 ├─────────────────────────────────┤
@@ -336,20 +341,22 @@ These wireframes represent the screen layouts for the Android app. All screens a
 └─────────────────────────────────┘
 ```
 
-**Custom Speed Picker** (modal):
+**Speed Picker** (modal for Add/Remove mode):
 ```
 ┌─────────────────────────────────┐
 │                                 │
 │   SELECT SPEEDS TO TEST         │
 │                                 │
 │  ┌─────────────────────────┐    │
-│  │ [✓] 1/1000   [ ] 1/8    │    │
-│  │ [✓] 1/500    [ ] 1/4    │    │
-│  │ [✓] 1/250    [ ] 1/2    │    │
-│  │ [✓] 1/125    [ ] 1s     │    │
-│  │ [✓] 1/60     [ ] 2s     │    │
-│  │ [ ] 1/30     [ ] 4s     │    │
-│  │ [ ] 1/15     [ ] B      │    │
+│  │ [ ] 1/8000   [✓] 1/30   │    │
+│  │ [ ] 1/4000   [✓] 1/15   │    │
+│  │ [ ] 1/2000   [✓] 1/8    │    │
+│  │ [✓] 1/1000   [✓] 1/4    │    │
+│  │ [✓] 1/500    [✓] 1/2    │    │
+│  │ [✓] 1/250    [✓] 1s     │    │
+│  │ [✓] 1/125    [ ] 2s     │    │
+│  │ [✓] 1/60     [ ] 4s     │    │
+│  │              [ ] 8s     │    │
 │  └─────────────────────────┘    │
 │                                 │
 │  ┌─────────────────────────┐    │
@@ -523,7 +530,7 @@ These wireframes represent the screen layouts for the Android app. All screens a
 │  └─────────────────────────────┘│
 │                                 │
 │  Legend:                        │
-│  █ Full  ▓ Partial  ░ Context   │
+│  █ Full  ▓ Partial  ░ Closed    │
 │                                 │
 │  [← Prev]            [Next →]   │
 │                                 │
@@ -624,14 +631,14 @@ These wireframes represent the screen layouts for the Android app. All screens a
 ├─────────────────────────────────┤
 │  ACCURACY TABLE            [↕]  │
 ├─────────────────────────────────┤
-│  Speed   Expected  Actual  Err  │
+│  Expected  Measured       Err   │
 │  ─────────────────────────────  │
-│  1/1000  1.00ms   1.04ms  +4%   │ ← green
-│  1/500   2.00ms   2.12ms  +6%   │ ← yellow
-│  1/250   4.00ms   4.08ms  +2%   │ ← green
-│  1/125   8.00ms   8.24ms  +3%   │ ← green
-│  1/60    16.7ms   18.1ms  +8%   │ ← orange
-│  1/30    33.3ms   34.2ms  +3%   │ ← green
+│  1/1000    1/962          +4%   │ ← green
+│  1/500     1/472          +6%   │ ← green
+│  1/250     1/245          +2%   │ ← green
+│  1/125     1/121          +3%   │ ← green
+│  1/60      1/55           +8%   │ ← green
+│  1/30      1/29           +3%   │ ← green
 │                     [see all]   │
 │                                 │
 ├─────────────────────────────────┤
@@ -869,11 +876,17 @@ Throughout the app, these colors indicate accuracy:
 
 | Color | Meaning | Error Range |
 |-------|---------|-------------|
-| Green | Accurate | 0-5% |
-| Yellow | Slight deviation | 5-10% |
-| Orange | Moderate deviation | 10-15% |
-| Red | Significant deviation | >15% |
-| Blue | Context frame (not in event) | N/A |
+| Green | Good | 0-10% |
+| Yellow | Fair | 10-30% |
+| Orange | Poor | 30-60% |
+| Red | Bad | >60% |
+
+Frame states in Event Review:
+| Color | Meaning |
+|-------|---------|
+| Green | Full (fully open) |
+| Orange | Partial (partially open) |
+| Red/Gray | Closed (excluded) |
 
 ---
 

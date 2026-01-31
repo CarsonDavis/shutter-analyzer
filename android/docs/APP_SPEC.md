@@ -2,7 +2,7 @@
 
 ## Document Status
 **Status**: Requirements Complete - Ready for Design/Development
-**Last Updated**: 2025-01-24
+**Last Updated**: 2025-01-25
 
 ---
 
@@ -126,12 +126,14 @@ Based on initial requirements gathering:
 - List of saved camera profiles (name, last tested date, quick status indicator)
 - "New Test" button (starts new session)
 - "Import Video" button (for existing slow-mo videos)
+- Help icon (?) with dropdown: Tutorial, How It Works
 - Settings gear icon
 
 **Actions**:
 - Tap camera → View camera detail/history
 - Tap "New Test" → Recording setup flow
 - Tap "Import" → File picker
+- Tap Help → Dropdown menu for Tutorial or Theory
 
 ---
 
@@ -155,10 +157,11 @@ Based on initial requirements gathering:
 **Purpose**: Configure test before recording
 
 **Elements**:
-- Camera name input (optional - can leave blank for unnamed session)
-- Speed set selector:
+- Camera name input (optional - generates default "Test Jan 25 14:30" if blank)
+- Speed set selector (3 options):
   - "Standard Set" (default): 1/1000 → 1s
-  - "Custom" → opens speed picker
+  - "Add or Remove Speeds" → opens checkbox speed picker (1/8000 to 8s range)
+  - "Enter Custom Speeds" → text input for comma-separated speeds (e.g., "1/50, 1/100, 1/400")
 - Brief setup reminder (collapsible): tripod, framing, lighting tips
 - "Start Recording" button
 - Link to full tutorial if needed
@@ -182,7 +185,7 @@ Based on initial requirements gathering:
   - "Done" (finish early with partial results)
 
 **Calibration Flow** (Two-Phase):
-1. **Setup Phase**: User adjusts focus/zoom, then taps "Begin Detecting"
+1. **Setup Phase**: User adjusts focus/zoom using vertical sliders on right edge (zoom on top, focus below), then taps "Begin Detecting" (centered at bottom)
 2. **Baseline Phase** (0-50% progress):
    - "Establishing baseline..." message with progress bar
    - Collects 60 frames to determine dark baseline
@@ -210,21 +213,21 @@ Based on initial requirements gathering:
 **Layout** (per event, shown one at a time):
 - Event label: "Event 1: 1/1000"
 - Frame strip showing:
-  - **[+] Examine more** button (left side) - adds 3 frames before
+  - **[+] "Earlier frames"** button (left side) - adds 3 frames before
   - 1 **context frame** before event (dark, outside detection boundary)
   - All **detected event frames** (brightness above threshold)
   - 1 **context frame** after event (dark, outside detection boundary)
-  - **Examine more [+]** button (right side) - adds 3 frames after
+  - **"Later frames" [+]** button (right side) - adds 3 frames after
 - Each frame shows:
-  - Frame thumbnail
+  - Frame thumbnail (actual video frame)
   - Brightness value or weight indicator
-  - Color coding: gray (closed/context), green (full open), orange (partial)
+  - Color coding: green (full open), orange (partial), red/gray (closed)
 
 **Interactions**:
-- **Tap frame to cycle state**: Full → Partial → Excluded → Full
+- **Tap frame to cycle state**: Full → Partial → Closed → Full
   - Useful if detection boundary is slightly off
-  - User can promote context frame to included, or exclude edge frame from event
-- **[+] Examine more buttons**: Add 3 more frames on that side (excluded by default)
+  - User can promote closed frame to included, or exclude edge frame from event
+- **[+] "Earlier/Later frames" buttons**: Add 3 more frames on that side (closed by default)
   - Can click multiple times to keep adding frames
   - Useful when detection missed start/end of shutter event
 - **Navigation**: "Previous Event" / "Next Event" buttons
@@ -235,9 +238,9 @@ Based on initial requirements gathering:
 ```
 Event 3: 1/250
 ┌───────────────────────────────────────────────────────────┐
-│ [+]  │ [ctx] │ [EVT] [EVT] [EVT] [EVT] │ [ctx] │  [+]    │
-│ more │  14   │  187   245   242   95   │  15   │  more   │
-│      │ gray  │ green green green orange│ gray  │         │
+│ [+]     │ [out] │ [EVT] [EVT] [EVT] [EVT] │ [out] │  [+]     │
+│ Earlier │  14   │  187   245   242   95   │  15   │  Later   │
+│ frames  │ gray  │ green green green orange│ gray  │  frames  │
 └───────────────────────────────────────────────────────────┘
          Tap any frame to cycle state
               [← Previous]  [Next →]
@@ -268,9 +271,9 @@ See [EXPAND_FRAMES_FEATURE.md](EXPAND_FRAMES_FEATURE.md) for detailed implementa
 - Overall accuracy summary (e.g., "Average: 5% deviation")
 
 **Accuracy Table**:
-- Columns: Speed Setting | Expected | Measured | Error %
-- Color-coded rows (green=accurate, yellow=slight, red=significant)
-- Sortable by any column
+- Columns: Expected | Measured | Error %
+- Values shown as fractions (e.g., "1/500", "1/472")
+- Color-coded rows: green (0-10%), yellow (10-30%), orange (30-60%), red (>60%)
 
 **Brightness Timeline Graph**:
 - X-axis: time (or frame number)

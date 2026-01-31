@@ -15,25 +15,29 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Help
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CameraAlt
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.semantics.heading
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextAlign
@@ -53,6 +57,8 @@ import java.time.Instant
  * @param onCameraClick Callback when a camera is clicked
  * @param onSettingsClick Callback when settings icon is clicked
  * @param onImportClick Callback when "Import" button is clicked
+ * @param onTutorialClick Callback when "Tutorial" is clicked from help menu
+ * @param onTheoryClick Callback when "How It Works" is clicked from help menu
  * @param viewModel The ViewModel for this screen
  */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -62,17 +68,18 @@ fun HomeScreen(
     onCameraClick: (Long) -> Unit,
     onSettingsClick: () -> Unit,
     onImportClick: () -> Unit,
+    onTutorialClick: () -> Unit = {},
+    onTheoryClick: () -> Unit = {},
     viewModel: HomeViewModel = hiltViewModel()
 ) {
     val cameras by viewModel.cameras.collectAsStateWithLifecycle()
     val isEmpty by viewModel.isEmpty.collectAsStateWithLifecycle()
 
-    val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+    var helpMenuExpanded by remember { mutableStateOf(false) }
 
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            LargeTopAppBar(
+            TopAppBar(
                 title = { Text("SHUTTER ANALYZER") },
                 actions = {
                     IconButton(onClick = onSettingsClick) {
@@ -81,8 +88,34 @@ fun HomeScreen(
                             contentDescription = "Open settings"
                         )
                     }
-                },
-                scrollBehavior = scrollBehavior
+                    Box {
+                        IconButton(onClick = { helpMenuExpanded = true }) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.Help,
+                                contentDescription = "Help"
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = helpMenuExpanded,
+                            onDismissRequest = { helpMenuExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("Tutorial") },
+                                onClick = {
+                                    helpMenuExpanded = false
+                                    onTutorialClick()
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("How It Works") },
+                                onClick = {
+                                    helpMenuExpanded = false
+                                    onTheoryClick()
+                                }
+                            )
+                        }
+                    }
+                }
             )
         },
         bottomBar = {
@@ -123,6 +156,12 @@ private fun CameraList(
     ) {
         item {
             Text(
+                text = "Measure your film camera's shutter speeds using your phone's slow-motion video.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(
                 text = "MY CAMERAS",
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.primary,
@@ -144,37 +183,50 @@ private fun CameraList(
 private fun EmptyState(
     modifier: Modifier = Modifier
 ) {
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier.padding(32.dp)
+    Column(modifier = modifier) {
+        // Subtitle at the top
+        Text(
+            text = "Measure your film camera's shutter speeds using your phone's slow-motion video.",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+        )
+
+        // Centered empty state content
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .weight(1f),
+            contentAlignment = Alignment.Center
         ) {
-            Icon(
-                imageVector = Icons.Default.CameraAlt,
-                contentDescription = null,
-                modifier = Modifier.size(80.dp),
-                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
-            )
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.padding(32.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.CameraAlt,
+                    contentDescription = null,
+                    modifier = Modifier.size(80.dp),
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                )
 
-            Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-            Text(
-                text = "No cameras tested yet",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+                Text(
+                    text = "No cameras tested yet",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
 
-            Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Text(
-                text = "Tap \"New Test\" to measure\nyour first camera's shutter speeds",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                textAlign = TextAlign.Center
-            )
+                Text(
+                    text = "Tap \"New Test\" to measure\nyour first camera's shutter speeds",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+            }
         }
     }
 }

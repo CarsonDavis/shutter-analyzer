@@ -77,6 +77,12 @@ fun NavGraph(
                 },
                 onImportClick = {
                     navController.navigate(Screen.Import.route)
+                },
+                onTutorialClick = {
+                    navController.navigate(Screen.Onboarding.route)
+                },
+                onTheoryClick = {
+                    navController.navigate(Screen.Theory.route)
                 }
             )
         }

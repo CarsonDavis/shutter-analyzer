@@ -81,8 +81,11 @@ fun RecordingSetupScreen(
     viewModel: RecordingSetupViewModel = hiltViewModel()
 ) {
     val cameraName by viewModel.cameraName.collectAsStateWithLifecycle()
-    val useStandardSpeeds by viewModel.useStandardSpeeds.collectAsStateWithLifecycle()
+    val speedSelectionMode by viewModel.speedSelectionMode.collectAsStateWithLifecycle()
     val selectedSpeeds by viewModel.selectedSpeeds.collectAsStateWithLifecycle()
+    val customSpeedText by viewModel.customSpeedText.collectAsStateWithLifecycle()
+    val parsedCustomSpeeds by viewModel.parsedCustomSpeeds.collectAsStateWithLifecycle()
+    val customSpeedError by viewModel.customSpeedError.collectAsStateWithLifecycle()
     val deviceFps by viewModel.deviceFps.collectAsStateWithLifecycle()
     val accuracyDescription by viewModel.accuracyDescription.collectAsStateWithLifecycle()
     val showSpeedPicker by viewModel.showSpeedPicker.collectAsStateWithLifecycle()
@@ -176,7 +179,7 @@ fun RecordingSetupScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("NEW TEST (v4)") },
+                title = { Text("NEW TEST") },
                 navigationIcon = {
                     IconButton(onClick = onBackClick) {
                         Icon(
@@ -231,25 +234,64 @@ fun RecordingSetupScreen(
                 SpeedSetOption(
                     title = "Standard Set",
                     description = "1/1000, 1/500, 1/250, 1/125, 1/60, 1/30, 1/15, 1/8, 1/4, 1/2, 1s",
-                    selected = useStandardSpeeds,
-                    onClick = { viewModel.setUseStandardSpeeds(true) }
+                    selected = speedSelectionMode == SpeedSelectionMode.STANDARD,
+                    onClick = { viewModel.setSpeedSelectionMode(SpeedSelectionMode.STANDARD) }
                 )
 
                 Spacer(modifier = Modifier.height(8.dp))
 
                 SpeedSetOption(
-                    title = "Custom",
-                    description = if (!useStandardSpeeds) {
+                    title = "Add or Remove Speeds",
+                    description = if (speedSelectionMode == SpeedSelectionMode.ADD_REMOVE) {
                         selectedSpeeds.joinToString(", ")
                     } else {
-                        "Choose specific speeds"
+                        "Choose specific speeds from list"
                     },
-                    selected = !useStandardSpeeds,
+                    selected = speedSelectionMode == SpeedSelectionMode.ADD_REMOVE,
                     onClick = {
-                        viewModel.setUseStandardSpeeds(false)
+                        viewModel.setSpeedSelectionMode(SpeedSelectionMode.ADD_REMOVE)
                         viewModel.openSpeedPicker()
                     }
                 )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                SpeedSetOption(
+                    title = "Enter Custom Speeds",
+                    description = if (speedSelectionMode == SpeedSelectionMode.ENTER_CUSTOM && parsedCustomSpeeds.isNotEmpty()) {
+                        parsedCustomSpeeds.joinToString(", ")
+                    } else {
+                        "Type your own speeds"
+                    },
+                    selected = speedSelectionMode == SpeedSelectionMode.ENTER_CUSTOM,
+                    onClick = { viewModel.setSpeedSelectionMode(SpeedSelectionMode.ENTER_CUSTOM) }
+                )
+
+                // Custom speed text input (shown when ENTER_CUSTOM is selected)
+                AnimatedVisibility(visible = speedSelectionMode == SpeedSelectionMode.ENTER_CUSTOM) {
+                    Column(modifier = Modifier.padding(top = 8.dp)) {
+                        OutlinedTextField(
+                            value = customSpeedText,
+                            onValueChange = viewModel::updateCustomSpeedText,
+                            modifier = Modifier.fillMaxWidth(),
+                            placeholder = { Text("e.g., 1/50, 1/100, 1/400, 1s") },
+                            singleLine = true,
+                            isError = customSpeedError != null,
+                            supportingText = {
+                                if (customSpeedError != null) {
+                                    Text(
+                                        text = customSpeedError!!,
+                                        color = MaterialTheme.colorScheme.error
+                                    )
+                                } else if (parsedCustomSpeeds.isNotEmpty()) {
+                                    Text("${parsedCustomSpeeds.size} speed(s) entered")
+                                } else {
+                                    Text("Format: 1/500, 1/250, 1s, 2s")
+                                }
+                            }
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -291,7 +333,8 @@ fun RecordingSetupScreen(
                         Column {
                             Spacer(modifier = Modifier.height(8.dp))
                             SetupReminderItem("Camera on tripod with back open")
-                            SetupReminderItem("Phone viewing through shutter")
+                            SetupReminderItem("Phone viewing back of shutter")
+                            SetupReminderItem("Aperture fully open")
                             SetupReminderItem("Bright light behind camera")
                         }
                     }
@@ -315,7 +358,7 @@ fun RecordingSetupScreen(
             Button(
                 onClick = { requestCameraPermission() },
                 modifier = Modifier.fillMaxWidth(),
-                enabled = selectedSpeeds.isNotEmpty()
+                enabled = viewModel.isSpeedSelectionValid()
             ) {
                 Text("START RECORDING")
             }
@@ -402,10 +445,8 @@ private fun SpeedPickerContent(
     onToggleSpeed: (String) -> Unit,
     onDone: () -> Unit
 ) {
-    val allSpeeds = listOf(
-        "1/1000", "1/500", "1/250", "1/125", "1/60",
-        "1/30", "1/15", "1/8", "1/4", "1/2", "1s", "2s", "4s", "B"
-    )
+    // Use ALL_SPEEDS from ViewModel (1/8000 to 8s)
+    val allSpeeds = ALL_SPEEDS
 
     Column(
         modifier = Modifier
